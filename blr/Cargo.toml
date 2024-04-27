@@ -1,0 +1,32 @@
+[package]
+name = "blr"
+authors.workspace = true
+categories.workspace = true
+description.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+builder_derive_more = { workspace = true }
+derive_builder = { workspace = true }
+derive_more = { workspace = true }
+nalgebra = { workspace = true }
+pyo3 = { workspace = true }
+pyo3_derive_more = { workspace = true }
+pyo3_macros_more = { workspace = true }
+semver = { workspace = true }
+thiserror = { workspace = true }
+which = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lib]
+name = "blr"
+path = "src/lib.rs"
+crate-type = ["rlib"]

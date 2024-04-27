@@ -1,0 +1,31 @@
+[workspace]
+members = [
+    # Rust interface for Blender
+    "blr",
+]
+resolver = "2"
+
+[workspace.package]
+authors = ["Andrej Orsula <orsula.andrej@gmail.com>"]
+categories = ["graphics", "rendering"]
+description = "Rust interface for Blender"
+edition = "2021"
+keywords = ["3D", "blend", "blender"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/AndrejOrsula/blr"
+rust-version = "1.70"
+version = "0.1.0"
+
+[workspace.dependencies]
+builder_derive_more = { version = "0.1" }
+derive_builder = { version = "0.20" }
+derive_more = { version = "0.99" }
+nalgebra = { version = "0.32" }
+pyo3 = { version = "0.20", features = ["abi3-py310", "auto-initialize"] }
+pyo3_derive_more = { version = "0.1" }
+pyo3_macros_more = { version = "0.1" }
+semver = { version = "1" }
+tempfile = { version = "3.2" }
+thiserror = { version = "1.0" }
+which = { version = "6.0" }
