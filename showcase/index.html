@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore native Blender assets generated from typed Rust recipes with blr.">
+  <title>Asset showcase — blr</title>
+  <link rel="stylesheet" href="../site.css">
+  <script type="module" src="../gallery.js"></script>
+</head>
+<body class="showcase-page">
+  <header><a class="brand" href="../index.html">blr<span>Blender × Rust</span></a></header>
+  <main>
+    <section class="hero showcase-hero">
+      <p class="eyebrow">BLR · TYPED SCENE RECIPES</p>
+      <h1>Typed Rust. Real Blender scenes.</h1>
+      <p class="intro">Compare the two Geometry Nodes heights, then inspect a rendered camera orbit or explore the scene in 3D.</p>
+    </section>
+    <section class="gallery-section" aria-labelledby="gallery-heading">
+      <div class="section-heading"><div><p class="eyebrow">THREE RECIPES · FOUR NATIVE RESULTS</p><h2 id="gallery-heading">Choose a scene to explore.</h2></div><p>Blender render · editable scene · portable model</p></div>
+      <!-- GALLERY -->
+<div class="gallery" id="asset-gallery" data-selected-asset="prism">
+  <div class="recipe-choices" role="group" aria-label="Recipe"><button type="button" data-recipe="procedural_asset" aria-pressed="true" disabled><img src="../gallery/prism/preview.png" alt="Textured prism rendered in Blender" width="64" height="64"><span class="recipe-copy"><strong>Textured prism</strong><small>Asymmetric mesh with a packed checker texture.</small></span></button><button type="button" data-recipe="geometry_nodes" aria-pressed="false" disabled><img src="../gallery/grid-high/preview.png" alt="Geometry Nodes rendered in Blender" width="64" height="64"><span class="recipe-copy"><strong>Geometry Nodes</strong><small>Editable extrusion, with half and full height results (1 m / 2 m).</small></span></button><button type="button" data-recipe="camera_turntable" aria-pressed="false" disabled><img src="../gallery/turntable/preview.png" alt="Camera turntable rendered in Blender" width="64" height="64"><span class="recipe-copy"><strong>Camera turntable</strong><small>8 native Cycles frames at 8 fps.</small></span></button></div>
+  <div class="stage"><span class="stage-label" id="stage-label">Blender · Cycles CPU</span><img id="asset-preview" src="../gallery/prism/preview.png" alt="Textured tapered prism rendered in Blender" width="256" height="256"><div class="view-controls" hidden><button type="button" id="render-view" aria-pressed="true">Blender render</button><button type="button" id="model-view" aria-pressed="false" disabled>Inspect 3D</button></div><p class="orbit-help" hidden>Drag or touch the model to orbit. Use the camera buttons for keyboard orbit and zoom. <button type="button" id="reset-view">Reset view</button></p><div class="turntable-controls" id="turntable-controls" role="group" aria-label="Rendered camera frames" hidden><button type="button" id="turntable-play" aria-pressed="false" aria-label="Play rendered orbit">Play rendered orbit</button><button type="button" id="turntable-prev" aria-label="Previous frame">Previous</button><button type="button" id="turntable-next" aria-label="Next frame">Next</button><label for="turntable-frame">Rendered frame</label><input id="turntable-frame" type="range" min="1" max="8" step="1" value="1" aria-label="Rendered frame"><output id="turntable-frame-label" for="turntable-frame">Frame 1/8</output><a id="download-frame" href="../gallery/turntable/frames/frame-0001.png" download>Download frame 1 PNG</a></div></div>
+  <div class="asset-info"><h2 id="asset-title">Textured prism</h2><p id="asset-description">A tapered, asymmetric mesh with per-corner UVs and a packed procedural checker.</p>
+  <div class="node-variants" id="node-variants" role="group" aria-label="Geometry Nodes height" hidden><button type="button" data-variant="grid-low" aria-pressed="false" disabled>Half height · 1 m</button><button type="button" data-variant="grid-high" aria-pressed="false" disabled>Full height · 2 m</button></div>
+  <dl><dt>Triangles</dt><dd id="triangle-count">28</dd><dt>Seed</dt><dd id="asset-seed">7</dd><dt>Height</dt><dd id="asset-height">2 m</dd></dl>
+  <p class="status" id="asset-status" role="status">Precomputed variants. Native turntable frames use Cycles; browser GLB lighting differs from Blender.</p>
+  <div class="downloads"><a id="download-glb" href="../gallery/prism/asset.glb" download>GLB</a><a id="download-blend" href="../gallery/prism/asset.blend" download>Blender scene</a><a id="download-manifest" href="../gallery/prism/manifest.json">Manifest</a><a id="build-provenance" href="../build-provenance.json">Build provenance</a></div></div></div>
+  <noscript><p>JavaScript is disabled. Blender previews and downloads:</p><ul><li>Textured prism: <a href="../gallery/prism/preview.png">Preview</a>, <a href="../gallery/prism/asset.glb">GLB</a>, <a href="../gallery/prism/asset.blend">Blender scene</a>, <a href="../gallery/prism/manifest.json">Manifest</a></li><li>Extruded grid · low: <a href="../gallery/grid-low/preview.png">Preview</a>, <a href="../gallery/grid-low/asset.glb">GLB</a>, <a href="../gallery/grid-low/asset.blend">Blender scene</a>, <a href="../gallery/grid-low/manifest.json">Manifest</a></li><li>Extruded grid · high: <a href="../gallery/grid-high/preview.png">Preview</a>, <a href="../gallery/grid-high/asset.glb">GLB</a>, <a href="../gallery/grid-high/asset.blend">Blender scene</a>, <a href="../gallery/grid-high/manifest.json">Manifest</a></li><li>Camera turntable: <a href="../gallery/turntable/preview.png">Preview</a>, <a href="../gallery/turntable/asset.glb">GLB</a>, <a href="../gallery/turntable/asset.blend">Blender scene</a>, <a href="../gallery/turntable/manifest.json">Manifest</a>, Frames: <a href="../gallery/turntable/frames/frame-0001.png">1</a> · <a href="../gallery/turntable/frames/frame-0002.png">2</a> · <a href="../gallery/turntable/frames/frame-0003.png">3</a> · <a href="../gallery/turntable/frames/frame-0004.png">4</a> · <a href="../gallery/turntable/frames/frame-0005.png">5</a> · <a href="../gallery/turntable/frames/frame-0006.png">6</a> · <a href="../gallery/turntable/frames/frame-0007.png">7</a> · <a href="../gallery/turntable/frames/frame-0008.png">8</a></li></ul></noscript>
+<!-- END GALLERY -->
+    </section>
+    <section class="recipe-story" aria-label="Preview boundaries"><p class="render-note">All scenes are precomputed. Blender renders, downloadable scenes, and GLB previews work without running Blender in your browser.</p></section>
+
+  </main>
+  <footer>Blender 5.2.0 <span>© Andrej Orsula · <a href="../LICENSE-APACHE">Apache-2.0</a> / <a href="../LICENSE-MIT">MIT</a> · <a href="../vendor/NOTICE.html">Third-party notices</a></span><span>Browser lighting is a preview; renders come from Blender on CPU.</span></footer>
+</body>
+</html>

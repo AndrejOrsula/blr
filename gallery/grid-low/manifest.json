@@ -1,0 +1,100 @@
+{
+  "camera_lens_mm": 50,
+  "camera_sensor_mm": [
+    36,
+    24
+  ],
+  "camera_to_world": [
+    [
+      0.8221921920776367,
+      -0.25697898864746094,
+      0.5078994035720825,
+      3.5999999046325684
+    ],
+    [
+      0.5692099928855896,
+      0.3711918890476227,
+      -0.7336324453353882,
+      -5.199999809265137
+    ],
+    [
+      -2.0223779984007706e-8,
+      0.8922882676124573,
+      0.45146608352661133,
+      3.700000047683716
+    ],
+    [
+      0,
+      0,
+      0,
+      1
+    ]
+  ],
+  "color": {
+    "display": "sRGB",
+    "exposure": 0,
+    "gamma": 1,
+    "look": "None",
+    "view_transform": "Standard"
+  },
+  "coordinates": {
+    "camera": "local -Z forward, +Y up; row-major camera-to-world matrix",
+    "gltf": "right-handed Y-up; meters",
+    "scene": "right-handed Z-up; meters"
+  },
+  "files": {
+    "asset.blend": {
+      "bytes": 94018,
+      "media_type": "application/x-blender",
+      "sha256": "cfcd2295e6ed230ff45eed78122cbe6faef2f0e60276a001bc386f5514e28408"
+    },
+    "asset.glb": {
+      "bytes": 7976,
+      "media_type": "model/gltf-binary",
+      "sha256": "f819a2e8df97157496f9c2e02a79e153499336a317449d2c78de572f95cb9194"
+    },
+    "checker.png": {
+      "bytes": 627,
+      "media_type": "image/png",
+      "sha256": "dc0da9fb2693aefb22d6566bd214870c7bb37b63584de0c99d9039288c88ff44",
+      "size": [
+        64,
+        64
+      ]
+    },
+    "preview.png": {
+      "bytes": 35555,
+      "media_type": "image/png",
+      "sha256": "70d60fb12c78a5e714d7c25d8cb5d724fc470737f980c9c1d60e03fb38b2193e",
+      "size": [
+        256,
+        256
+      ]
+    }
+  },
+  "geometry": {
+    "triangles": 192,
+    "vertices": 113
+  },
+  "parameters": {
+    "height": 1,
+    "radius": 1,
+    "resolution": 256,
+    "segments": 8
+  },
+  "recipe": "geometry_nodes",
+  "runtime": {
+    "blender": "5.2.0",
+    "blender_build_hash": "fbe6228777e7",
+    "device": "CPU",
+    "engine": "CYCLES",
+    "frame": 1,
+    "python": "3.13.15 (main, Sep 19 2026, 01:05:56) [GCC 12.2.0]",
+    "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)",
+    "samples": 16,
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "schema_version": 1,
+  "seed": 7,
+  "variant": "low"
+}
