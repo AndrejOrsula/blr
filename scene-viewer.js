@@ -208,7 +208,7 @@ function supportsWebGl(win) {
  * Mount an interactive preview in `host`. Input positions use Blender's world-space Z-up axes.
  * Colors are linear sRGB RGBA factors in [0, 1], as required by glTF PBR materials.
  */
-export function createScenePreview(host) {
+export function createScenePreview(host, { loadViewer = () => import(new URL(VIEWER_PATH, import.meta.url).href) } = {}) {
   if (!host || typeof host.append !== "function" || !host.ownerDocument) throw new TypeError("createScenePreview requires a DOM host element");
   const doc = host.ownerDocument;
   const win = doc.defaultView;
@@ -219,6 +219,7 @@ export function createScenePreview(host) {
   let generation = 0;
   let disposed = false;
   let currentSummary;
+  let pendingShow;
 
   const shell = doc.createElement("div");
   shell.className = "blr-scene-preview";
@@ -256,10 +257,15 @@ export function createScenePreview(host) {
     const counts = summary ? `Scene summary: ${summary.objects} objects, ${summary.vertices} vertices, ${summary.triangles} triangles.` : "";
     status.textContent = `${message} ${counts} Download remains available.`;
   };
+  const settlePending = (state) => {
+    const settle = pendingShow;
+    if (settle) settle(state);
+  };
   const dispose = () => {
     if (disposed) return;
     disposed = true;
     generation += 1;
+    settlePending("stale");
     removeViewer();
     revokeArtifact();
     shell.remove();
@@ -272,6 +278,7 @@ export function createScenePreview(host) {
       if (disposed) throw new Error("Scene preview has been disposed");
       const { blob, summary } = createSceneGlb(scene);
       const token = ++generation;
+      settlePending("stale");
       removeViewer();
       revokeArtifact();
       objectUrl = win.URL.createObjectURL(blob);
@@ -288,9 +295,24 @@ export function createScenePreview(host) {
         failPreview("Interactive preview unavailable: WebGL is not available in this browser.");
         return summary;
       }
+      const outcome = new Promise((resolve) => {
+        let timer;
+        const settle = (state) => {
+          win.clearTimeout(timer);
+          if (pendingShow === settle) pendingShow = undefined;
+          resolve(state);
+        };
+        pendingShow = settle;
+        timer = win.setTimeout(() => {
+          if (disposed || token !== generation) return settle("stale");
+          generation += 1;
+          failPreview("Interactive preview timed out while loading.");
+          settle("unavailable");
+        }, 15_000);
+      });
       try {
-        await import(new URL(VIEWER_PATH, import.meta.url).href);
-        if (disposed || token !== generation) return summary;
+        const moduleReady = await Promise.race([loadViewer().then(() => true), outcome.then(() => false)]);
+        if (!moduleReady || disposed || token !== generation) return summary;
         if (!win.customElements.get("model-viewer")) throw new Error("The local model-viewer component did not register.");
         const element = doc.createElement("model-viewer");
         element.setAttribute("camera-controls", "");
@@ -304,10 +326,16 @@ export function createScenePreview(host) {
         element.style.minHeight = "240px";
         element.style.flex = "1 1 auto";
         element.addEventListener("load", () => {
-          if (!disposed && token === generation) status.textContent = `Interactive Blender mesh preview ready. ${summary.objects} objects, ${summary.triangles} triangles. Browser lighting.`;
+          if (!disposed && token === generation) {
+            status.textContent = `Interactive Blender mesh preview ready. ${summary.objects} objects, ${summary.triangles} triangles. Browser lighting.`;
+            settlePending("ready");
+          }
         }, { once: true });
         element.addEventListener("error", () => {
-          if (!disposed && token === generation) failPreview("Interactive preview failed to load.");
+          if (!disposed && token === generation) {
+            failPreview("Interactive preview failed to load.");
+            settlePending("unavailable");
+          }
         }, { once: true });
         viewer = element;
         shell.prepend(element);
@@ -316,13 +344,16 @@ export function createScenePreview(host) {
         if (!disposed && token === generation) {
           const detail = error instanceof Error ? error.message : "unknown viewer error";
           failPreview(`Interactive preview unavailable: ${detail}`);
+          settlePending("unavailable");
         }
       }
+      await outcome;
       return summary;
     },
     clear() {
       if (disposed) return;
       generation += 1;
+      settlePending("stale");
       removeViewer();
       revokeArtifact();
       status.textContent = "No scene loaded.";

@@ -1,13 +1,14 @@
+import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.js';
+
 (() => {
   'use strict';
 
   const LEGACY_CHANNEL = 'blr-demo';
   const MAX_CAPTURED_OUTPUT = 64 * 1024;
   const MAX_SCENE_OUTPUT = 32 * 1024 * 1024;
-  const MAX_COMMAND_BYTES = 256 * 1024;
-  const MAX_OBJECTS = 64;
-  const MAX_VERTICES = 100000;
-  const MAX_TRIANGLES = 200000;
+  const MAX_OBJECTS = sceneProtocolLimits.objects;
+  const MAX_VERTICES = sceneProtocolLimits.vertices;
+  const MAX_TRIANGLES = sceneProtocolLimits.triangles;
   const SCENE_CHANNEL = 'blr-scene-v1';
   const EXPECTED_BUILD_HASH = 'fbe6228777e7';
   const MAX_MANIFEST_BYTES = 16 * 1024;
@@ -356,39 +357,7 @@
     if (inputReceived || legacySize !== null) return fail('runtime received duplicate scene input');
     inputReceived = true;
     try {
-      if (typeof data.commandText !== 'string') throw new Error('scene command text is missing');
-      if (new TextEncoder().encode(data.commandText).byteLength > MAX_COMMAND_BYTES) throw new Error('scene commands exceed the 256 KiB limit');
-      const commands = JSON.parse(data.commandText);
-      if (!commands || typeof commands !== 'object' || Array.isArray(commands)
-        || commands.schema !== 'blr-scene-commands-v1' || !Array.isArray(commands.objects)
-        || commands.objects.length > MAX_OBJECTS) throw new Error('unsupported scene command schema or object count');
-      if (Object.keys(commands).some(key => !['schema', 'objects'].includes(key))) throw new Error('unsupported scene command field');
-      const allowed = new Set(['kind', 'name', 'location', 'rotation', 'scale', 'color', 'size', 'radius', 'radius1', 'radius2', 'depth', 'segments', 'ring_count', 'major_segments', 'minor_segments', 'major_radius', 'minor_radius']);
-      const kinds = new Set(['cube', 'uv_sphere', 'cylinder', 'cone', 'torus', 'plane']);
-      const names = new Set();
-      for (const object of commands.objects) {
-        if (!object || typeof object !== 'object' || Array.isArray(object)
-          || Object.keys(object).some(key => !allowed.has(key))
-          || typeof object.name !== 'string' || !object.name || new TextEncoder().encode(object.name).byteLength > 128
-          || names.has(object.name) || !kinds.has(object.kind)) throw new Error('invalid primitive command');
-        names.add(object.name);
-        for (const field of ['location', 'rotation', 'scale']) {
-          const vector = object[field];
-          if (vector === undefined) continue;
-          if (!Array.isArray(vector) || vector.length !== 3
-            || !vector.every(value => Number.isFinite(value) && Math.abs(value) <= 1000)
-            || (field === 'scale' && vector.some(value => value === 0))) throw new Error(`${field} coordinates must be finite and within the 1000 bound`);
-        }
-        if (object.color !== undefined && (!Array.isArray(object.color) || object.color.length !== 4
-          || !object.color.every(value => Number.isFinite(value) && value >= 0 && value <= 1))) throw new Error('invalid RGBA color');
-        for (const field of ['size', 'radius', 'radius1', 'radius2', 'depth', 'major_radius', 'minor_radius']) {
-          if (object[field] !== undefined && (!Number.isFinite(object[field]) || object[field] < 0 || object[field] > 1000)) throw new Error(`invalid ${field} dimension`);
-        }
-        for (const field of ['segments', 'ring_count', 'major_segments', 'minor_segments']) {
-          if (object[field] !== undefined && (!Number.isSafeInteger(object[field]) || object[field] < 3 || object[field] > 128)) throw new Error(`invalid ${field} count`);
-        }
-        if (object.kind === 'torus' && (object.minor_radius ?? 0.25) >= (object.major_radius ?? 1)) throw new Error('torus minor radius must be smaller than major radius');
-      }
+      validateSceneCommands(data.commandText);
       startRuntime({ kind: 'scene', commandJson: data.commandText }).catch(error => fail(error instanceof Error ? error.message : 'runtime startup failed'));
     } catch (error) {
       fail(error instanceof Error ? error.message : 'invalid scene commands');

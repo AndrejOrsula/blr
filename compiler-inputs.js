@@ -1,4 +1,8 @@
+import { readBoundedJson, readBoundedResponse, runWithAssetLoadBounds } from "./compiler/asset-loading.js";
+
 const MAX_HELPER_BYTES = 128 * 1024;
+const MAX_COMPILER_MANIFEST_BYTES = 8 * 1024;
+const MAX_EXAMPLES_MANIFEST_BYTES = 32 * 1024;
 const MAX_COMPRESSED_BYTES = 24 * 1024 * 1024;
 const MAX_SYSROOT_TAR_BYTES = 80 * 1024 * 1024;
 const DECODER_WASM_BYTES = 206243;
@@ -41,32 +45,7 @@ function checkAbort(signal) {
 
 async function fetchBytes(url, { signal, limit, label }) {
   const response = await fetch(url, { cache: "force-cache", credentials: "same-origin", signal });
-  if (!response.ok || !response.body) throw new Error(`${label} request failed (HTTP ${response.status}).`);
-  const reader = response.body.getReader();
-  const chunks = [];
-  let size = 0;
-  try {
-    while (true) {
-      checkAbort(signal);
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > limit) throw new RangeError(`${label} exceeds ${limit} bytes.`);
-      chunks.push(value);
-    }
-  } catch (error) {
-    await reader.cancel().catch(() => {});
-    throw error;
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
+  return readBoundedResponse(response, { signal, limit, label });
 }
 
 function withAbort(promise, signal, worker) {
@@ -152,8 +131,11 @@ async function loadManifest(signal) {
     credentials: "same-origin",
     signal,
   });
-  if (!response.ok) throw new Error(`Compiler asset manifest request failed (HTTP ${response.status}).`);
-  const manifest = await response.json();
+  const manifest = await readBoundedJson(response, {
+    signal,
+    limit: MAX_COMPILER_MANIFEST_BYTES,
+    label: "Compiler asset manifest",
+  });
   if (manifest?.schema !== "blr-rust-compiler-assets-v1"
     || manifest.compilerVersion !== "rustc 1.83.0-dev"
     || manifest.target !== "wasm32-wasip1"
@@ -183,8 +165,11 @@ async function loadHelper(signal) {
     credentials: "same-origin",
     signal,
   });
-  if (!examplesResponse.ok) throw new Error(`Rust example manifest request failed (HTTP ${examplesResponse.status}).`);
-  const examples = await examplesResponse.json();
+  const examples = await readBoundedJson(examplesResponse, {
+    signal,
+    limit: MAX_EXAMPLES_MANIFEST_BYTES,
+    label: "Rust example manifest",
+  });
   if (examples?.schema !== "blr-rust-demo-examples-v1"
     || examples?.compilerTarget !== "wasm32-wasip1"
     || examples?.helperModule !== "blr_demo.rs"
@@ -236,22 +221,17 @@ let cachedInputs;
 export async function loadPinnedInputs({ signal } = {}) {
   checkAbort(signal);
   if (cachedInputs) return cachedInputs;
-  const attempt = (async () => {
-    await loadManifest(signal);
-    const helperPromise = loadHelper(signal);
-    const rustcPromise = decodeAsset("compiler/assets/rustc_opt.wasm.br", pins.get("compiler/assets/rustc_opt.wasm.br"), signal);
-    const sysrootPromise = decodeAsset("compiler/assets/wasm32-wasip1.tar.br", pins.get("compiler/assets/wasm32-wasip1.tar.br"), signal);
+  return runWithAssetLoadBounds(async (loadSignal) => {
+    await loadManifest(loadSignal);
+    const helperPromise = loadHelper(loadSignal);
+    const rustcPromise = decodeAsset("compiler/assets/rustc_opt.wasm.br", pins.get("compiler/assets/rustc_opt.wasm.br"), loadSignal);
+    const sysrootPromise = decodeAsset("compiler/assets/wasm32-wasip1.tar.br", pins.get("compiler/assets/wasm32-wasip1.tar.br"), loadSignal);
     const [helper, rustcBytes, sysrootTar] = await Promise.all([helperPromise, rustcPromise, sysrootPromise]);
-    checkAbort(signal);
+    checkAbort(loadSignal);
     const inputs = { helper, rustcBytes, sysrootFiles: makeSysrootFiles(sysrootTar) };
     cachedInputs = inputs;
     return inputs;
-  })();
-  try {
-    return await attempt;
-  } catch (error) {
-    throw error;
-  }
+  }, { signal });
 }
 
 export function clearPinnedInputCacheForTest() {

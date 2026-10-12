@@ -1,4 +1,5 @@
 import initBrotli, { brotli_dec } from "./brotli-dec-wasm/pkg/brotli_dec_wasm.js";
+import { readBoundedResponse } from "./asset-loading.js";
 
 let ready = false;
 
@@ -15,8 +16,7 @@ self.addEventListener("message", async (event) => {
         throw new Error("Invalid Brotli decoder initialization request.");
       }
       const response = await fetch(message.decoderUrl, { credentials: "same-origin", cache: "force-cache" });
-      if (!response.ok) throw new Error(`Decoder Wasm request failed (HTTP ${response.status}).`);
-      const bytes = new Uint8Array(await response.arrayBuffer());
+      const bytes = await readBoundedResponse(response, { limit: message.decoderBytes, label: "Decoder Wasm" });
       if (bytes.byteLength !== message.decoderBytes
         || hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))) !== message.decoderSha256) {
         throw new Error("Brotli decoder Wasm pin mismatch.");

@@ -7,39 +7,22 @@
 const scopePath = new URL(self.registration.scope).pathname;
 const runtimeCacheName = `blr-runtime-assets:${scopePath}`;
 const compilerCacheName = `blr-compiler-assets:${scopePath}`;
+/* BLR_ASSET_PINS_BEGIN */
 const runtimeAssets = new Map([
-  [
-    `${scopePath}runtime/blender.js`,
-    { size: 224813, sha256: "562cce8059f290b3c34459b9ca5c1688a9c9664a317b7bac0efdd2f77f81f217" },
-  ],
-  [
-    `${scopePath}runtime/blender.wasm.gz`,
-    { size: 32799503, sha256: "b8cd2ff8b0c73cd08fadaed220f93ac2e2df73e671e9484f346c59039c74099f" },
-  ],
+  [`${scopePath}runtime/blender.js`, { size: 224813, sha256: "562cce8059f290b3c34459b9ca5c1688a9c9664a317b7bac0efdd2f77f81f217" }],
+  [`${scopePath}runtime/blender.wasm.gz`, { size: 32979348, sha256: "935831c7fc04b4d3191fdeb2faac115a6454d753338bfb63d60dd2b6c6e284ad" }],
 ]);
-const runtimeCacheBytes = [...runtimeAssets.values()].reduce((total, asset) => total + asset.size, 0);
-// This finite list mirrors compiler/cache-manifest.json. Its small manifest
-// and binary dependencies enter a separate cache only after Run requests them.
+const maxRuntimeCacheBytes = 34603008;
 const compilerAssets = new Map([
-  [
-    `${scopePath}compiler/cache-manifest.json`,
-    { size: 670, sha256: "e5ff1d6050b7181acef21c773a35ed85049354769a2c928548a1022423327494" },
-  ],
-  [
-    `${scopePath}compiler/assets/rustc_opt.wasm.br`,
-    { size: 19774341, sha256: "10f06919521c61f177b432ae7fd08cc3d4547efc3b13c2f547560fb53cf05ca6" },
-  ],
-  [
-    `${scopePath}compiler/assets/wasm32-wasip1.tar.br`,
-    { size: 18933366, sha256: "bf29ba33cbf6267c10a1c1838edfff76d19750287159adfa08ab308db922bfdb" },
-  ],
-  [
-    `${scopePath}compiler/brotli-dec-wasm/pkg/brotli_dec_wasm_bg.wasm`,
-    { size: 206243, sha256: "7cb4663fd0b11185b88177d0b3b3048136572faf49e81c4c78dccafe37bb68d7" },
-  ],
+  [`${scopePath}compiler/cache-manifest.json`, { size: 670, sha256: "e5ff1d6050b7181acef21c773a35ed85049354769a2c928548a1022423327494" }],
+  [`${scopePath}compiler/assets/rustc_opt.wasm.br`, { size: 19774341, sha256: "10f06919521c61f177b432ae7fd08cc3d4547efc3b13c2f547560fb53cf05ca6" }],
+  [`${scopePath}compiler/assets/wasm32-wasip1.tar.br`, { size: 18933366, sha256: "bf29ba33cbf6267c10a1c1838edfff76d19750287159adfa08ab308db922bfdb" }],
+  [`${scopePath}compiler/brotli-dec-wasm/pkg/brotli_dec_wasm_bg.wasm`, { size: 206243, sha256: "7cb4663fd0b11185b88177d0b3b3048136572faf49e81c4c78dccafe37bb68d7" }],
 ]);
+const maxCompilerCacheBytes = 83886080;
+/* BLR_ASSET_PINS_END */
+const runtimeCacheBytes = [...runtimeAssets.values()].reduce((total, asset) => total + asset.size, 0);
 const compilerCacheBytes = [...compilerAssets.values()].reduce((total, asset) => total + asset.size, 0);
-const maxCompilerCacheBytes = 80 * 1024 * 1024;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -88,7 +71,7 @@ function compilerCacheKey(pathname, asset) {
 }
 
 async function trimRuntimeCache(cache) {
-  if (runtimeCacheBytes > 33 * 1024 * 1024) {
+  if (runtimeCacheBytes > maxRuntimeCacheBytes) {
     throw new Error("declared runtime cache exceeds its 33 MiB bound");
   }
   const allowed = new Set([...runtimeAssets].map(([pathname, asset]) => runtimeCacheKey(pathname, asset)));
@@ -117,7 +100,7 @@ async function readBoundedBody(body, expectedSize) {
       const { done, value } = await reader.read();
       if (done) break;
       if (value.byteLength > expectedSize - offset) {
-        await reader.cancel();
+        reader.cancel().catch(() => {});
         return null;
       }
       bytes.set(value, offset);
@@ -127,6 +110,17 @@ async function readBoundedBody(body, expectedSize) {
     reader.releaseLock();
   }
   return offset === expectedSize ? bytes : null;
+}
+
+async function cachedResponseMatchesPin(response, asset) {
+  if (!response || response.status !== 200 || response.headers.has("content-range")) return false;
+  const declared = response.headers.get("content-length");
+  if (declared !== null && declared !== String(asset.size)) return false;
+  const bytes = await readBoundedBody(response.clone().body, asset.size);
+  if (!bytes) return false;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  const hexDigest = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return hexDigest === asset.sha256;
 }
 
 async function cacheVerifiedRuntimeResponse(cache, request, response, asset) {
@@ -184,7 +178,8 @@ async function fetchRuntimeAsset(event, asset) {
     cache = await caches.open(runtimeCacheName);
     await trimRuntimeCache(cache);
     const cached = await cache.match(event.request);
-    if (cached) return withIsolationHeaders(cached);
+    if (cached && await cachedResponseMatchesPin(cached, asset)) return withIsolationHeaders(cached);
+    if (cached) await cache.delete(event.request);
   } catch {
     // CacheStorage may be unavailable or over quota; the online path still works.
     cache = undefined;
@@ -213,8 +208,10 @@ async function fetchCompilerAsset(event, asset) {
   try {
     cache = await caches.open(compilerCacheName);
     await trimCompilerCache(cache);
-    const cached = await cache.match(compilerCacheKey(pathname, asset));
-    if (cached) return withIsolationHeaders(cached);
+    const key = compilerCacheKey(pathname, asset);
+    const cached = await cache.match(key);
+    if (cached && await cachedResponseMatchesPin(cached, asset)) return withIsolationHeaders(cached);
+    if (cached) await cache.delete(key);
   } catch {
     // CacheStorage may be unavailable or over quota; compilation can still fetch online.
     cache = undefined;

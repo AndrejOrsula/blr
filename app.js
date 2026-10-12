@@ -369,8 +369,8 @@ async function runCurrentSource() {
     const summary = await preview.show(result.scene);
     if (activeRun !== run || run.controller.signal.aborted) return;
     setSceneSummary(summary, result.identity);
-    setStage("preview", "complete", "Interactive browser preview ready");
-    setPhase("Complete", "ready");
+    setStage("preview", "complete", currentPreview ? "Interactive browser preview ready" : "Viewer unavailable; GLB download ready");
+    setPhase(currentPreview ? "Complete" : "Complete · download available", "ready");
     runtimeNote.textContent = currentPreview
       ? "Run complete. Rust compiled and Blender returned the displayed mesh."
       : "Blender returned the mesh, but this browser could not show the interactive preview. The run-specific GLB is available to download.";

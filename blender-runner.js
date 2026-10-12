@@ -1,10 +1,10 @@
-const MAX_COMMAND_BYTES = 256 * 1024;
+import { validateSceneCommands } from './protocol/validate.js';
+
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_ORDINARY_OUTPUT = 64 * 1024;
 const MAX_OBJECTS = 64;
 const MAX_VERTICES = 100_000;
 const MAX_TRIANGLES = 200_000;
-const KINDS = new Set(['cube', 'uv_sphere', 'cylinder', 'cone', 'torus', 'plane']);
 const EXPECTED_BUILD_HASH = 'fbe6228777e7';
 const RUN_TIMEOUT_MS = 180_000;
 const READY_TIMEOUT_MS = 30_000;
@@ -16,67 +16,6 @@ function protocolError(message) {
 
 function bytesOf(value) {
   return new TextEncoder().encode(value).byteLength;
-}
-
-function validateCommands(input) {
-  if (typeof input !== 'string') throw protocolError('commands must be supplied as their original JSON text');
-  const json = input;
-  if (typeof json !== 'string' || bytesOf(json) > MAX_COMMAND_BYTES) throw protocolError('commands exceed the 256 KiB limit');
-  let commands;
-  try {
-    commands = JSON.parse(json);
-  } catch {
-    throw protocolError('commands are not valid JSON');
-  }
-  if (!commands || typeof commands !== 'object' || Array.isArray(commands)
-    || commands.schema !== 'blr-scene-commands-v1' || !Array.isArray(commands.objects)
-    || commands.objects.length > MAX_OBJECTS) {
-    throw protocolError('commands have an unsupported schema or object count');
-  }
-  if (Object.keys(commands).some(key => !['schema', 'objects'].includes(key))) {
-    throw protocolError('commands contain an unsupported field');
-  }
-  const names = new Set();
-  const allowed = new Set([
-    'kind', 'name', 'location', 'rotation', 'scale', 'color', 'size', 'radius', 'radius1', 'radius2',
-    'depth', 'segments', 'ring_count', 'major_segments', 'minor_segments', 'major_radius', 'minor_radius',
-  ]);
-  for (const object of commands.objects) {
-    if (!object || typeof object !== 'object' || Array.isArray(object)
-      || typeof object.name !== 'string' || object.name.length < 1 || bytesOf(object.name) > 128
-      || names.has(object.name) || Object.keys(object).some(key => !allowed.has(key))) {
-      throw protocolError('each command needs a unique, bounded object name');
-    }
-    if (typeof object.kind !== 'string' || !KINDS.has(object.kind)) throw protocolError('command primitive kind is unsupported');
-    names.add(object.name);
-    for (const field of ['location', 'rotation', 'scale']) {
-      if (object[field] === undefined) continue;
-      const vector = object[field];
-      if (!Array.isArray(vector) || vector.length !== 3
-        || !vector.every(value => finiteNumber(value) && Math.abs(value) <= 1000)
-        || (field === 'scale' && vector.some(value => value === 0))) {
-        throw protocolError(`command ${field} coordinates must be finite and within the 1000 bound${field === 'scale' ? ' with no zero component' : ''}`);
-      }
-    }
-    if (object.color !== undefined && (!Array.isArray(object.color) || object.color.length !== 4
-      || !object.color.every(value => finiteNumber(value) && value >= 0 && value <= 1))) {
-      throw protocolError('command color must be linear RGBA in the 0 through 1 range');
-    }
-    for (const field of ['size', 'radius', 'radius1', 'radius2', 'depth', 'major_radius', 'minor_radius']) {
-      if (object[field] !== undefined && (!finiteNumber(object[field]) || object[field] < 0 || object[field] > 1000)) {
-        throw protocolError(`command ${field} must be a finite value from 0 through 1000`);
-      }
-    }
-    for (const field of ['segments', 'ring_count', 'major_segments', 'minor_segments']) {
-      if (object[field] !== undefined && (!Number.isSafeInteger(object[field]) || object[field] < 3 || object[field] > 128)) {
-        throw protocolError(`command ${field} must be an integer from 3 through 128`);
-      }
-    }
-    if (object.kind === 'torus' && (object.minor_radius ?? 0.25) >= (object.major_radius ?? 1)) {
-      throw protocolError('torus minor radius must be smaller than major radius');
-    }
-  }
-  return json;
 }
 
 function finiteNumber(value) {
@@ -159,7 +98,7 @@ async function waitForIsolation(promise, signal) {
 }
 
 export async function runBlenderScene(commands, { signal, onStatus, onOutput } = {}) {
-  const commandJson = validateCommands(commands);
+  const commandJson = validateSceneCommands(commands);
   if (signal?.aborted) throw abortError();
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw protocolError('a browser document is required');
