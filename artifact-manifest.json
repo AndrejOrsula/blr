@@ -458,8 +458,8 @@
     },
     {
       "path": "index.html",
-      "size": 10558,
-      "sha256": "536b4cafc896b774891f714846441a109d1f36e07202ea514097a59ae2c05267"
+      "size": 10912,
+      "sha256": "3c96439e24ecc3c9bb636bb95e0c617ff7072d7866979206c4640f1bb7f16917"
     },
     {
       "path": "isolation.js",
