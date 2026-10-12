@@ -47,6 +47,7 @@ async function instantiate(module, memory, imports) {
 }
 
 self.onmessage = async ({ data }) => {
+  let phase = "initialize";
   try {
     if (data?.type === "compile") {
       const module = await WebAssembly.compile(data.bytes);
@@ -81,6 +82,9 @@ self.onmessage = async ({ data }) => {
       postMessage({ type: "thread-done", tid });
       close();
     } else if (data?.type === "start") {
+      phase = "compile";
+      if (!isThread) postMessage({ type: "progress", phase, asset: "rustc-compiler", state: "start",
+        loadedBytes: null, totalBytes: null, source: "work", error: null });
       rpc = data.rpc;
       rpcState = new Int32Array(rpc);
       const { instance } = self.__pending;
@@ -91,9 +95,11 @@ self.onmessage = async ({ data }) => {
         else if (error === THREAD_EXIT) exitCode = 0;
         else throw error;
       }
+      if (!isThread) postMessage({ type: "progress", phase, asset: "rustc-compiler", state: "complete",
+        loadedBytes: null, totalBytes: null, source: "work", error: null });
       postMessage({ type: "result", exitCode });
     }
   } catch (error) {
-    postMessage({ type: "failure", error: error instanceof Error ? error.message : String(error) });
+    postMessage({ type: "failure", phase, error: error instanceof Error ? error.message : String(error) });
   }
 };

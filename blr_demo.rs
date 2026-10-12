@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Small, public, std-only authoring scaffold for the browser scene demo.
 //!
 //! This is a deliberately limited command builder, not the native `blr` crate. The host

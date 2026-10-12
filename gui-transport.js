@@ -3,8 +3,10 @@ import { validateSceneCommands } from './protocol/validate.js';
 const CHANNEL = 'blr-gui-transport-v1';
 const MAX_QUEUE = 8;
 const MAX_COMMAND_BYTES = 256 * 1024;
+const MAX_PYTHON_SOURCE_BYTES = 256 * 1024;
 const MAX_SCENE_BYTES = 32 * 1024 * 1024;
-const MAX_RESULT_BYTES = MAX_SCENE_BYTES + 4096;
+const MAX_PYTHON_DIAGNOSTIC_BYTES = 64 * 1024;
+const MAX_RESULT_BYTES = MAX_SCENE_BYTES + 3 * MAX_PYTHON_DIAGNOSTIC_BYTES + 8192;
 const MAX_SMALL_BYTES = 4096;
 const typedArrayTag = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag)?.get;
 const MAX_OBJECTS = 64;
@@ -154,9 +156,64 @@ function validateScene(scene) {
   return scene;
 }
 
+function validateProgress(record) {
+  const phases = ['fetch', 'verify', 'decode', 'unpack', 'initialize', 'compile', 'execute'];
+  const states = ['start', 'update', 'complete', 'error', 'cancelled'];
+  const sources = ['network-or-cache', 'memory-cache', 'work'];
+  if (!record || typeof record !== 'object' || Array.isArray(record)
+    || Object.keys(record).sort().join(',') !== 'asset,error,loadedBytes,phase,source,state,totalBytes'
+    || !phases.includes(record.phase) || !states.includes(record.state)
+    || (record.asset !== null && (typeof record.asset !== 'string' || record.asset.length > 128))
+    || (record.source !== null && !sources.includes(record.source))
+    || (record.loadedBytes !== null && (!Number.isSafeInteger(record.loadedBytes) || record.loadedBytes < 0))
+    || (record.totalBytes !== null && (!Number.isSafeInteger(record.totalBytes) || record.totalBytes < 0))
+    || (record.loadedBytes !== null && record.totalBytes !== null && record.loadedBytes > record.totalBytes)
+    || (record.error !== null && (typeof record.error !== 'string' || utf8Bytes(record.error) > 512))) {
+    throw guiError('runtime progress record is malformed');
+  }
+  return record;
+}
+
+function validatePythonResult(record, currentLease) {
+  const keys = ['schema', 'ok', 'scene', 'lease_token', 'missing', 'stdout', 'stderr', 'traceback'];
+  if (!record || typeof record !== 'object' || Array.isArray(record)
+    || Object.keys(record).sort().join(',') !== [...keys].sort().join(',')
+    || record.schema !== 'blr-python-scene-v1' || typeof record.ok !== 'boolean'
+    || (record.lease_token !== null && (typeof record.lease_token !== 'string'
+      || !/^[\x21-\x7e]{1,128}$/.test(record.lease_token)))
+    || !Array.isArray(record.missing) || record.missing.length > MAX_OBJECTS
+    || record.missing.some(name => typeof name !== 'string' || !name || utf8Bytes(name) > 256)) {
+    throw guiError('built-in Python scene result has an unsupported shape');
+  }
+  for (const field of ['stdout', 'stderr', 'traceback']) {
+    const value = record[field];
+    if (field === 'traceback' && value === null) continue;
+    if (typeof value !== 'string' || utf8Bytes(value) > MAX_PYTHON_DIAGNOSTIC_BYTES) {
+      throw guiError(`built-in Python ${field} exceeds its byte limit`);
+    }
+  }
+  if (record.ok) {
+    if (record.lease_token === null || record.missing.length !== 0) throw guiError('successful Python result has no lease or reports missing objects');
+    validateScene(record.scene);
+  } else if (record.scene !== null || record.lease_token !== currentLease) {
+    throw guiError('failed Python result does not preserve the current lease');
+  }
+  return {
+    python: true,
+    ok: record.ok,
+    scene: record.scene === null ? null : validateScene(record.scene),
+    leaseToken: record.lease_token,
+    missing: record.missing,
+    stdout: record.stdout,
+    stderr: record.stderr,
+    traceback: record.traceback,
+  };
+}
+
 function validateBridgeResult(operation, record, currentLease) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) throw guiError('built-in result is malformed');
   const identity = validateIdentity(record.identity);
+  if (operation === 'run_python') return { ...validatePythonResult(record.result, currentLease), identity };
   if (operation === 'create' || operation === 'snapshot') {
     const result = record.result;
     if (!result || typeof result !== 'object' || Array.isArray(result)
@@ -190,7 +247,7 @@ function randomRunId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
+export function createBlenderGui({ host, onStatus, onOutput, onProgress, onState } = {}) {
   if (!host || typeof host.append !== 'function') throw guiError('a GUI host element is required');
   if (typeof window === 'undefined' || typeof document === 'undefined') throw guiError('a browser document is required');
   const runId = randomRunId();
@@ -222,6 +279,7 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
   let documentInvalidated = false;
   let frameInitialized = false;
   let active = null;
+  const pendingProgress = new Map();
   let startIdentity = null;
   let startResolve = null;
   let startReject = null;
@@ -245,6 +303,11 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
 
   function output(record) {
     try { if (typeof onOutput === 'function') onOutput(record); } catch { /* output is advisory */ }
+  }
+
+  function progress(record) {
+    try { if (typeof onProgress === 'function') onProgress(record); } catch { /* progress is advisory */ }
+    try { if (typeof active?.onProgress === 'function') active.onProgress(record); } catch { /* progress is advisory */ }
   }
 
   function frameWindow() {
@@ -323,9 +386,9 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
       settle(next, guiError('request expired before dispatch'));
       return publish();
     }
-    if ((next.operation === 'create' && lease !== null)
-      || (next.operation !== 'create' && (lease === null || next.leaseToken !== lease))) {
-      settle(next, guiError(next.operation === 'create' ? 'a scene lease became active before dispatch' : 'scene lease changed before dispatch'));
+    if ((next.operation === 'snapshot' || next.operation === 'reset')
+      && (lease === null || next.leaseToken !== lease)) {
+      settle(next, guiError('scene lease changed before dispatch'));
       return publish();
     }
     if (!Number.isSafeInteger(currentRequestId + 1)) {
@@ -338,7 +401,7 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
     next.generation = leaseGeneration;
     updateState('busy', next.id);
     let request;
-    if (next.operation === 'create') request = { id: next.id, operation: 'create' };
+    if (next.operation === 'create' || next.operation === 'run_python') request = { id: next.id, operation: next.operation };
     else request = { id: next.id, operation: next.operation, lease_token: next.leaseToken };
     const text = JSON.stringify(request);
     if (utf8Bytes(text) > 4096) {
@@ -349,10 +412,10 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
     }
     try {
       const fs = moduleFS();
-      if (next.operation === 'create') {
+      if (next.operation === 'create' || next.operation === 'run_python') {
         const commandPath = `/blr_gui/commands/${next.id}.json`;
         const commandTemporary = `${commandPath}.tmp`;
-        fs.writeFile(commandTemporary, new TextEncoder().encode(next.commandsJson));
+        fs.writeFile(commandTemporary, new TextEncoder().encode(next.operation === 'create' ? next.commandsJson : next.source));
         fs.rename(commandTemporary, commandPath);
       }
       const path = `/blr_gui/requests/${next.id}.json`;
@@ -427,6 +490,11 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
           lease = null;
           leaseGeneration += 1;
           lastSnapshotStale = lastSnapshot !== null;
+        }
+        if (item.operation === 'run_python' && value.ok) {
+          lease = value.leaseToken;
+          lastSnapshot = { ...value, capturedAt: Date.now(), source: item.operation };
+          lastSnapshotStale = false;
         }
         settle(item, null, value);
         updateState('ready', item.id);
@@ -531,6 +599,15 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
     } else if (message.type === 'output') {
       if ((message.stream !== 'stdout' && message.stream !== 'stderr') || typeof message.text !== 'string') return fail(guiError('GUI runtime output is malformed'));
       output({ stream: message.stream, text: message.text.slice(0, 4096) });
+    } else if (message.type === 'progress') {
+      if (Object.keys(message).some(key => !['channel', 'runId', 'type', 'progress'].includes(key))) return fail(guiError('GUI progress message has unsupported fields'));
+      try {
+        const record = validateProgress(message.progress);
+        const key = `${record.phase}\0${record.asset || ''}`;
+        if (record.state === 'start' || record.state === 'update') pendingProgress.set(key, record);
+        else pendingProgress.delete(key);
+        progress(record);
+      } catch (error) { return fail(error instanceof Error ? error : guiError('GUI progress message is malformed')); }
     } else if (message.type === 'error') fail(guiError(typeof message.message === 'string' ? message.message.slice(0, 512) : 'GUI frame failed'));
   }
 
@@ -545,14 +622,15 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
     }
   }
 
-  function enqueue(operation, details = {}, { signal } = {}) {
+  function enqueue(operation, details = {}, { signal, onProgress } = {}) {
     if (!ready || disposed) return Promise.reject(guiError(disposed ? 'runtime was disposed' : 'runtime is not ready'));
     if (signal?.aborted) return Promise.reject(abortError());
     if (queue.length + (active ? 1 : 0) >= MAX_QUEUE) return Promise.reject(guiError('request queue is full'));
-    if ((operation === 'create' && lease !== null) || (operation !== 'create' && lease === null)) {
-      return Promise.reject(guiError(operation === 'create' ? 'a scene lease is already active' : 'no active scene lease'));
+    if ((operation === 'snapshot' || operation === 'reset') && lease === null) {
+      return Promise.reject(guiError('no active scene lease'));
     }
     let commandsJson;
+    let source;
     if (operation === 'create') {
       try {
         commandsJson = validateSceneCommands(details.commands);
@@ -561,10 +639,17 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
         return Promise.reject(error instanceof Error ? error : guiError('scene commands are invalid'));
       }
     }
+    if (operation === 'run_python') {
+      if (typeof details.source !== 'string') return Promise.reject(guiError('Python source must be text'));
+      source = details.source;
+      if (utf8Bytes(source) > MAX_PYTHON_SOURCE_BYTES) return Promise.reject(guiError('Python source exceeds 256 KiB'));
+    }
     return new Promise((resolve, reject) => {
       const item = {
         operation,
         commandsJson,
+        source,
+        onProgress,
         leaseToken: lease,
         resolve,
         reject,
@@ -631,6 +716,10 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
   function dispose() {
     if (disposed) return;
     disposed = true;
+    for (const record of pendingProgress.values()) {
+      progress({ ...record, state: 'cancelled', error: null });
+    }
+    pendingProgress.clear();
     clearTimeout(startupTimer);
     clearTimeout(pollTimer);
     globalThis.window?.removeEventListener('message', onMessage);
@@ -644,9 +733,11 @@ export function createBlenderGui({ host, onStatus, onOutput, onState } = {}) {
   return Object.freeze({
     start,
     createScene: (commands, options) => enqueue('create', { commands }, options),
+    runPython: (source, options) => enqueue('run_python', { source }, options),
     snapshot: options => enqueue('snapshot', {}, options),
     reset: options => enqueue('reset', {}, options),
     dispose,
+    close: dispose,
     get ready() { return ready; },
     get fatal() { return fatal; },
     get visibleFrame() { return visibleFrame; },

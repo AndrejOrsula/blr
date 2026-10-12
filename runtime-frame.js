@@ -6,6 +6,8 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
   const LEGACY_CHANNEL = 'blr-demo';
   const MAX_CAPTURED_OUTPUT = 64 * 1024;
   const MAX_SCENE_OUTPUT = 32 * 1024 * 1024;
+  const MAX_PYTHON_SOURCE_BYTES = 256 * 1024;
+  const MAX_PYTHON_DIAGNOSTIC_BYTES = 64 * 1024;
   const MAX_OBJECTS = sceneProtocolLimits.objects;
   const MAX_VERTICES = sceneProtocolLimits.vertices;
   const MAX_TRIANGLES = sceneProtocolLimits.triangles;
@@ -30,6 +32,9 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
   let failed = false;
   let inputReceived = false;
   let legacySize = null;
+  let runtimeMode = null;
+  const pendingProgress = new Map();
+  const startupAbort = new AbortController();
 
   function post(type, values = {}) {
     window.parent.postMessage({ channel: runChannel, runId, type, ...values }, location.origin);
@@ -40,12 +45,40 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
     post('status', { status: state });
   }
 
+  function boundedUtf8(value, maximum = 512) {
+    let text = '';
+    let bytes = 0;
+    for (const character of String(value)) {
+      const codepoint = character.codePointAt(0);
+      const size = codepoint <= 0x7f ? 1 : codepoint <= 0x7ff ? 2 : codepoint <= 0xffff ? 3 : 4;
+      if (bytes + size > maximum) break;
+      text += character;
+      bytes += size;
+    }
+    return text;
+  }
+
+  function progress(phase, asset, state, loadedBytes = null, totalBytes = null, source = null, error = null) {
+    if (failed) return;
+    const record = { phase, asset, state, loadedBytes, totalBytes, source, error };
+    const key = `${phase}\0${asset || ''}`;
+    if (state === 'start' || state === 'update') pendingProgress.set(key, record);
+    else pendingProgress.delete(key);
+    try { post('progress', { progress: record }); }
+    catch { /* progress reporting is advisory */ }
+  }
+
   const runId = params.get('run') || '';
   const runChannel = params.has('size') ? LEGACY_CHANNEL : SCENE_CHANNEL;
   function fail(message) {
     if (failed) return;
+    const detail = boundedUtf8(message);
+    for (const record of pendingProgress.values()) {
+      progress(record.phase, record.asset, 'error', record.loadedBytes, record.totalBytes, record.source, detail);
+    }
+    pendingProgress.clear();
     failed = true;
-    const detail = String(message).slice(0, 512);
+    startupAbort.abort();
     statusNode.textContent = `Blender runtime failed: ${detail}`;
     post('error', { message: detail });
   }
@@ -69,7 +102,7 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
     return `sha256-${btoa(String.fromCharCode(...bytes))}`;
   }
 
-  async function readBounded(stream, maximum, label) {
+  async function readBounded(stream, maximum, label, onChunk = null) {
     if (!stream) throw new Error(`${label} response has no body`);
     const reader = stream.getReader();
     const chunks = [];
@@ -84,6 +117,7 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
           throw new Error(`${label} exceeds the ${maximum}-byte limit`);
         }
         chunks.push(value);
+        try { onChunk?.(length); } catch { /* progress reporting is advisory */ }
       }
     } finally {
       reader.releaseLock();
@@ -117,14 +151,30 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
     return entries;
   }
 
-  async function fetchVerified(url, metadata, label) {
-    const response = await fetch(url, { credentials: 'same-origin', cache: 'force-cache' });
-    if (!response.ok) throw new Error(`${label} request failed (${response.status})`);
+  async function fetchVerified(url, metadata, label, asset) {
     const maximum = label === 'Blender loader' ? MAX_LOADER_BYTES : MAX_COMPRESSED_WASM_BYTES;
-    const bytes = await readBounded(response.body, maximum, label);
-    if (bytes.byteLength !== metadata.size) throw new Error(`${label} size does not match the runtime manifest`);
-    if (await sha256(bytes) !== metadata.sha256) throw new Error(`${label} SHA-256 does not match the runtime manifest`);
-    return bytes;
+    let loaded = 0;
+    let phase = 'fetch';
+    progress('fetch', asset, 'start', 0, metadata.size, 'network-or-cache');
+    try {
+      const response = await fetch(url, { credentials: 'same-origin', cache: 'force-cache', signal: startupAbort.signal });
+      if (!response.ok) throw new Error(`${label} request failed (${response.status})`);
+      const bytes = await readBounded(response.body, maximum, label, count => {
+        loaded = count;
+        progress('fetch', asset, 'update', count, metadata.size, 'network-or-cache');
+      });
+      progress('fetch', asset, 'complete', loaded, metadata.size, 'network-or-cache');
+      phase = 'verify';
+      progress('verify', asset, 'start', null, null, 'work');
+      if (bytes.byteLength !== metadata.size) throw new Error(`${label} size does not match the runtime manifest`);
+      if (await sha256(bytes) !== metadata.sha256) throw new Error(`${label} SHA-256 does not match the runtime manifest`);
+      progress('verify', asset, 'complete', null, null, 'work');
+      return bytes;
+    } catch (error) {
+      progress(phase, asset, 'error', phase === 'fetch' ? loaded : null, phase === 'fetch' ? metadata.size : null,
+        phase === 'fetch' ? 'network-or-cache' : 'work', boundedUtf8(error?.message || error));
+      throw error;
+    }
   }
 
   function makePythonExpression(size) {
@@ -186,6 +236,29 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
     return `exec(${JSON.stringify(code)})`;
   }
 
+  function makePythonSceneExpression(source) {
+    const code = [
+      'import bpy, json, sys',
+      'probe = __import__("_blr_browser_probe")',
+      'version = tuple(bpy.app.version)',
+      'if version != (5, 2, 0): raise RuntimeError("expected Blender 5.2.0; observed %r" % (version,))',
+      'if hasattr(probe, "__file__"): raise AssertionError("Rust module unexpectedly has __file__")',
+      'spec = getattr(probe, "__spec__", None)',
+      'origin = getattr(spec, "origin", None)',
+      'if origin != "built-in": raise AssertionError("Rust module is not built-in: %r" % (origin,))',
+      'raw_build_hash = bpy.app.build_hash',
+      'build_hash = raw_build_hash.decode("ascii", "strict") if isinstance(raw_build_hash, bytes) else raw_build_hash',
+      `if not isinstance(build_hash, str) or not build_hash.isascii() or build_hash != "${EXPECTED_BUILD_HASH}": raise AssertionError("unexpected Blender build hash: %r" % (build_hash,))`,
+      `source = ${JSON.stringify(source)}`,
+      'result_text = probe.run_python_scene(source)',
+      'if not isinstance(result_text, str): raise AssertionError("Python scene callback did not return JSON text")',
+      'record = json.loads(result_text)',
+      'record["identity"] = {"module": probe.__name__, "origin": origin, "has_file": False, "function_module": probe.run_python_scene.__module__, "blender_version": list(version), "python_version": sys.version, "blender_build_hash": build_hash, "inventory_unchanged": True}',
+      'print("BLR_BROWSER_PYTHON_RESULT " + json.dumps(record, separators=(",", ":"), ensure_ascii=False))',
+    ].join('\n');
+    return `exec(${JSON.stringify(code)})`;
+  }
+
   function validateScene(scene) {
     if (!scene || typeof scene !== 'object' || Array.isArray(scene)
       || scene.schema !== 'blr-scene-v1' || !Array.isArray(scene.objects)
@@ -219,6 +292,7 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
 
   function parseRuntimeOutput(line) {
     const scenePrefix = 'BLR_BROWSER_SCENE_RESULT ';
+    const pythonPrefix = 'BLR_BROWSER_PYTHON_RESULT ';
     const cubePrefix = 'BLR_BROWSER_PROBE_RESULT ';
     if (line.startsWith(scenePrefix)) {
       if (line.length > MAX_SCENE_OUTPUT + MAX_CAPTURED_OUTPUT) return fail('Blender scene result exceeded the output limit');
@@ -236,6 +310,41 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
         resultRecord = { scene, identity: rust };
       } catch (error) {
         return fail(error instanceof Error ? error.message : 'invalid Blender scene result');
+      }
+      return;
+    }
+    if (line.startsWith(pythonPrefix)) {
+      if (line.length > MAX_SCENE_OUTPUT + 3 * MAX_PYTHON_DIAGNOSTIC_BYTES + 8192) return fail('Python scene result exceeded the output limit');
+      if (resultRecord) return fail('Blender emitted more than one result record');
+      try {
+        const record = JSON.parse(line.slice(pythonPrefix.length));
+        const expected = ['schema', 'ok', 'scene', 'lease_token', 'missing', 'stdout', 'stderr', 'traceback', 'identity'].sort().join(',');
+        if (!record || typeof record !== 'object' || Array.isArray(record)
+          || Object.keys(record).sort().join(',') !== expected || record.schema !== 'blr-python-scene-v1'
+          || typeof record.ok !== 'boolean' || !Array.isArray(record.missing) || record.missing.length > MAX_OBJECTS
+          || (record.lease_token !== null && typeof record.lease_token !== 'string')) throw new Error('Python result envelope is malformed');
+        for (const field of ['stdout', 'stderr', 'traceback']) {
+          const value = record[field];
+          if (field === 'traceback' && value === null) continue;
+          if (typeof value !== 'string' || new TextEncoder().encode(value).byteLength > MAX_PYTHON_DIAGNOSTIC_BYTES) throw new Error(`Python ${field} exceeds its byte limit`);
+        }
+        const rust = record.identity;
+        if (!rust || rust.module !== '_blr_browser_probe' || rust.origin !== 'built-in'
+          || rust.has_file !== false || rust.function_module !== '_blr_browser_probe'
+          || JSON.stringify(rust.blender_version) !== '[5,2,0]'
+          || typeof rust.python_version !== 'string' || !/^3\.13\./.test(rust.python_version)
+          || rust.blender_build_hash !== EXPECTED_BUILD_HASH || rust.inventory_unchanged !== true) {
+          throw new Error('Python Blender identity or cleanup was not proven');
+        }
+        if (record.ok) {
+          record.scene = validateScene(record.scene);
+          if (record.lease_token !== null || record.missing.length !== 0) throw new Error('successful headless Python result must not carry a GUI lease');
+        } else if (record.scene !== null || record.lease_token !== null || record.missing.length !== 0) {
+          throw new Error('failed headless Python result contains a scene lease');
+        }
+        resultRecord = record;
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'invalid Blender Python result');
       }
       return;
     }
@@ -276,13 +385,20 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
 
   async function startRuntime(mode) {
     if (failed) return;
+    runtimeMode = mode;
     if (!('DecompressionStream' in window) || !crypto.subtle) throw new Error('this browser cannot verify the runtime files');
     setStatus('loading');
+    progress('fetch', 'runtime/manifest.json', 'start', 0, null, 'network-or-cache');
     const manifestResponse = await fetch(new URL('runtime/manifest.json', location.href), {
-      credentials: 'same-origin', cache: 'no-store',
+      credentials: 'same-origin', cache: 'no-store', signal: startupAbort.signal,
     });
     if (!manifestResponse.ok) throw new Error(`runtime manifest request failed (${manifestResponse.status})`);
-    const manifestBytes = await readBounded(manifestResponse.body, MAX_MANIFEST_BYTES, 'runtime manifest');
+    let manifestLoaded = 0;
+    const manifestBytes = await readBounded(manifestResponse.body, MAX_MANIFEST_BYTES, 'runtime manifest', count => {
+      manifestLoaded = count;
+      progress('fetch', 'runtime/manifest.json', 'update', count, null, 'network-or-cache');
+    });
+    progress('fetch', 'runtime/manifest.json', 'complete', manifestLoaded, null, 'network-or-cache');
     const manifest = JSON.parse(new TextDecoder().decode(manifestBytes));
     const files = validateManifest(manifest);
     setStatus('verifying runtime files');
@@ -295,23 +411,33 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
       || !loaderUrl.pathname.startsWith(runtimeRoot.pathname)
       || !compressedUrl.pathname.startsWith(runtimeRoot.pathname)) throw new Error('runtime path escaped its same-origin directory');
     const [loaderBytes, compressedBytes] = await Promise.all([
-      fetchVerified(loaderUrl, files['blender.js'], 'Blender loader'),
-      fetchVerified(compressedUrl, files['blender.wasm.gz'], 'compressed Blender runtime'),
+      fetchVerified(loaderUrl, files['blender.js'], 'Blender loader', 'blender.js'),
+      fetchVerified(compressedUrl, files['blender.wasm.gz'], 'compressed Blender runtime', 'blender.wasm.gz'),
     ]);
+    progress('unpack', 'blender.wasm', 'start', 0, files['blender.wasm'].size, 'work');
+    let unpacked = 0;
     const decompressed = await readBounded(
       new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream('gzip')),
       MAX_WASM_BYTES,
       'decompressed Wasm',
+      count => {
+        unpacked = count;
+        progress('unpack', 'blender.wasm', 'update', count, files['blender.wasm'].size, 'work');
+      },
     );
+    progress('unpack', 'blender.wasm', 'complete', unpacked, files['blender.wasm'].size, 'work');
+    progress('verify', 'blender.wasm', 'start', null, null, 'work');
     if (decompressed.byteLength !== files['blender.wasm'].size) throw new Error('decompressed Wasm size does not match the runtime manifest');
     if (await sha256(decompressed) !== files['blender.wasm'].sha256) throw new Error('decompressed Wasm SHA-256 does not match the runtime manifest');
+    progress('verify', 'blender.wasm', 'complete', null, null, 'work');
     setStatus('starting Blender 5.2');
     window.Module = {
       wasmBinary: decompressed,
       arguments: [
         '--background', '--factory-startup', '--threads', '1',
         '--python-exit-code', '1', '--python-expr', mode.kind === 'scene'
-          ? makeScenePythonExpression(mode.commandJson) : makePythonExpression(mode.size),
+          ? makeScenePythonExpression(mode.commandJson) : mode.kind === 'python'
+            ? makePythonSceneExpression(mode.source) : makePythonExpression(mode.size),
       ],
       preRun: [() => {
         if (!window.Module.ENV || typeof window.Module.ENV !== 'object') throw new Error('Blender runtime did not export its environment interface');
@@ -323,15 +449,25 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
         if (capturedOutput > MAX_CAPTURED_OUTPUT) return fail('Blender output exceeded the 64 KiB limit');
         post('output', { stream: 'stderr', text: String(line).slice(0, 4096) });
       },
-      onRuntimeInitialized: () => setStatus('running Blender 5.2'),
+      onRuntimeInitialized: () => {
+        progress('initialize', null, 'complete', null, null, 'work');
+        progress('execute', runtimeMode?.kind || null, 'start', null, null, 'work');
+        setStatus('running Blender 5.2');
+      },
       onAbort: reason => fail(`Blender runtime aborted: ${String(reason).slice(0, 384)}`),
       onExit: status => {
         const code = Number(status);
         post('exit', { status: Number.isInteger(code) ? code : -1 });
-        if (code !== 0) fail(`Blender exited with status ${String(status)}`);
-        else if (!resultRecord) fail('Blender exited successfully without a valid Rust result');
+        if (code !== 0) {
+          progress('execute', runtimeMode?.kind || null, 'error', null, null, 'work', `Blender exited with status ${String(status)}`);
+          fail(`Blender exited with status ${String(status)}`);
+        }
+        else if (!resultRecord) fail('Blender exited successfully without a valid result');
         else if (!failed) {
-          statusNode.textContent = 'Blender demo complete';
+          const pythonFailed = resultRecord.ok === false;
+          statusNode.textContent = pythonFailed ? 'Python execution failed' : 'Blender demo complete';
+          progress('execute', runtimeMode?.kind || null, pythonFailed ? 'error' : 'complete', null, null, 'work',
+            pythonFailed ? boundedUtf8(resultRecord.traceback || 'Python execution failed') : null);
           post('result', resultRecord);
         }
       },
@@ -342,6 +478,7 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
         return resolved.href;
       },
     };
+    progress('initialize', null, 'start', null, null, 'work');
     const script = document.createElement('script');
     script.src = loaderUrl.href;
     script.integrity = sha256Integrity(files['blender.js'].sha256);
@@ -357,8 +494,15 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
     if (inputReceived || legacySize !== null) return fail('runtime received duplicate scene input');
     inputReceived = true;
     try {
-      validateSceneCommands(data.commandText);
-      startRuntime({ kind: 'scene', commandJson: data.commandText }).catch(error => fail(error instanceof Error ? error.message : 'runtime startup failed'));
+      if (data.language === 'rust' && Object.keys(data).sort().join(',') === 'channel,commandText,language,runId,type') {
+        validateSceneCommands(data.commandText);
+        startRuntime({ kind: 'scene', commandJson: data.commandText }).catch(error => fail(error instanceof Error ? error.message : 'runtime startup failed'));
+      } else if (data.language === 'python' && Object.keys(data).sort().join(',') === 'channel,language,runId,source,type') {
+        if (typeof data.source !== 'string' || new TextEncoder().encode(data.source).byteLength > MAX_PYTHON_SOURCE_BYTES) {
+          throw new Error('Python source exceeds the 256 KiB runtime limit');
+        }
+        startRuntime({ kind: 'python', source: data.source }).catch(error => fail(error instanceof Error ? error.message : 'runtime startup failed'));
+      } else throw new Error('runtime received an unsupported language request');
     } catch (error) {
       fail(error instanceof Error ? error.message : 'invalid scene commands');
     }

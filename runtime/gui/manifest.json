@@ -1,16 +1,16 @@
 {
   "files": {
     "blender.js": {
-      "sha256": "d844ef32a8cad2bd4c80b570b7190518728a44c9aa96e916fb41571258f4d0cb",
+      "sha256": "b01a103048d4a4815add2190738d008e1dde99f0ade5439a16167737c5e5bdda",
       "size": 317487
     },
     "blender.wasm": {
-      "sha256": "3da16d2fab4d7d593b1a5bef4a56a0b13cb6391f4766270119d439d149abadaf",
-      "size": 146985910
+      "sha256": "4d11e7d3297b39b240b65c4aa55c705cf3daf99d115a297a077d1e35d8508bec",
+      "size": 147120042
     },
     "blender.wasm.gz": {
-      "sha256": "4af3f31a92c8658236115c9c9ba59e86771db020b5b5e14b531a2bd684744e03",
-      "size": 60226717
+      "sha256": "b0f0bff893cc6d4eaf88cd422548c207045acd4029165b79a91d01ade767f8cb",
+      "size": 60270117
     }
   }
 }

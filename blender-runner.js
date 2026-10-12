@@ -2,6 +2,8 @@ import { validateSceneCommands } from './protocol/validate.js';
 
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_ORDINARY_OUTPUT = 64 * 1024;
+const MAX_PYTHON_SOURCE_BYTES = 256 * 1024;
+const MAX_PYTHON_DIAGNOSTIC_BYTES = 64 * 1024;
 const MAX_OBJECTS = 64;
 const MAX_VERTICES = 100_000;
 const MAX_TRIANGLES = 200_000;
@@ -16,6 +18,24 @@ function protocolError(message) {
 
 function bytesOf(value) {
   return new TextEncoder().encode(value).byteLength;
+}
+
+function validateProgress(record) {
+  const phases = ['fetch', 'verify', 'decode', 'unpack', 'initialize', 'compile', 'execute'];
+  const states = ['start', 'update', 'complete', 'error', 'cancelled'];
+  const sources = ['network-or-cache', 'memory-cache', 'work'];
+  if (!record || typeof record !== 'object' || Array.isArray(record)
+    || Object.keys(record).sort().join(',') !== 'asset,error,loadedBytes,phase,source,state,totalBytes'
+    || !phases.includes(record.phase) || !states.includes(record.state)
+    || (record.asset !== null && (typeof record.asset !== 'string' || record.asset.length > 128))
+    || (record.source !== null && !sources.includes(record.source))
+    || (record.loadedBytes !== null && (!Number.isSafeInteger(record.loadedBytes) || record.loadedBytes < 0))
+    || (record.totalBytes !== null && (!Number.isSafeInteger(record.totalBytes) || record.totalBytes < 0))
+    || (record.loadedBytes !== null && record.totalBytes !== null && record.loadedBytes > record.totalBytes)
+    || (record.error !== null && (typeof record.error !== 'string' || bytesOf(record.error) > 512))) {
+    throw protocolError('runtime progress record is malformed');
+  }
+  return record;
 }
 
 function finiteNumber(value) {
@@ -97,8 +117,18 @@ async function waitForIsolation(promise, signal) {
   if (signal?.aborted) throw abortError();
 }
 
-export async function runBlenderScene(commands, { signal, onStatus, onOutput } = {}) {
+export async function runBlenderScene(commands, options = {}) {
   const commandJson = validateSceneCommands(commands);
+  return runBlenderRuntime({ kind: 'rust', commandJson }, options);
+}
+
+export async function runPythonScene(source, options = {}) {
+  if (typeof source !== 'string') throw protocolError('Python source must be text');
+  if (bytesOf(source) > MAX_PYTHON_SOURCE_BYTES) throw protocolError('Python source exceeds 256 KiB');
+  return runBlenderRuntime({ kind: 'python', source }, options);
+}
+
+async function runBlenderRuntime(mode, { signal, onStatus, onOutput, onProgress } = {}) {
   if (signal?.aborted) throw abortError();
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw protocolError('a browser document is required');
@@ -132,7 +162,7 @@ export async function runBlenderScene(commands, { signal, onStatus, onOutput } =
     let outputBytes = 0;
     let ready = false;
     let result = null;
-    let identityRecord = null;
+    let lastProgress = null;
     let exitSeen = false;
     let exitCode = null;
     let settled = false;
@@ -145,6 +175,9 @@ export async function runBlenderScene(commands, { signal, onStatus, onOutput } =
     };
     const finish = (error, value) => {
       if (settled) return;
+      if (error?.name === 'AbortError' && lastProgress && typeof onProgress === 'function') {
+        try { onProgress({ ...lastProgress, state: 'cancelled', error: null }); } catch { /* progress is advisory */ }
+      }
       settled = true;
       cleanup();
       if (error) reject(error);
@@ -167,7 +200,10 @@ export async function runBlenderScene(commands, { signal, onStatus, onOutput } =
         clearTimeout(timer);
         timer = setTimeout(() => finish(protocolError('Blender run exceeded 180 seconds')), RUN_TIMEOUT_MS);
         status('Blender runtime ready');
-        frame.contentWindow.postMessage({ channel: CHANNEL, runId, type: 'run', commandText: commandJson }, location.origin);
+        const message = mode.kind === 'rust'
+          ? { channel: CHANNEL, runId, type: 'run', language: 'rust', commandText: mode.commandJson }
+          : { channel: CHANNEL, runId, type: 'run', language: 'python', source: mode.source };
+        frame.contentWindow.postMessage(message, location.origin);
         return;
       }
       if (!ready) return finish(protocolError('runtime sent data before the ready handshake'));
@@ -188,6 +224,17 @@ export async function runBlenderScene(commands, { signal, onStatus, onOutput } =
         }
         return;
       }
+      if (data.type === 'progress') {
+        if (Object.keys(data).some(key => !['channel', 'runId', 'type', 'progress'].includes(key))) return finish(protocolError('runtime progress message has unsupported fields'));
+        let record;
+        try { record = validateProgress(data.progress); } catch (error) {
+          return finish(error instanceof Error ? error : protocolError('runtime progress message is malformed'));
+        }
+        if (record.state === 'start' || record.state === 'update') lastProgress = record;
+        else lastProgress = null;
+        try { if (typeof onProgress === 'function') onProgress(record); } catch { /* progress is advisory */ }
+        return;
+      }
       if (data.type === 'result') {
         if (result) return finish(protocolError('runtime sent more than one scene result'));
         try {
@@ -199,13 +246,30 @@ export async function runBlenderScene(commands, { signal, onStatus, onOutput } =
             || data.identity.blender_build_hash !== EXPECTED_BUILD_HASH) {
             throw protocolError('Blender or built-in Rust identity was not proven');
           }
-          result = validateScene(data.scene).scene;
-          identityRecord = data.identity;
+          if (mode.kind === 'python') {
+            const expected = ['channel', 'runId', 'type', 'schema', 'ok', 'scene', 'lease_token', 'missing', 'stdout', 'stderr', 'traceback', 'identity'].sort().join(',');
+            if (Object.keys(data).sort().join(',') !== expected || data.schema !== 'blr-python-scene-v1'
+              || typeof data.ok !== 'boolean' || data.lease_token !== null || !Array.isArray(data.missing)
+              || data.missing.length !== 0) throw protocolError('Python result envelope is malformed');
+            for (const field of ['stdout', 'stderr', 'traceback']) {
+              if (field === 'traceback' && data[field] === null) continue;
+              if (typeof data[field] !== 'string' || bytesOf(data[field]) > MAX_PYTHON_DIAGNOSTIC_BYTES) {
+                throw protocolError(`Python ${field} exceeds 64 KiB`);
+              }
+            }
+            if (data.ok) result = { python: true, ok: true, scene: validateScene(data.scene).scene,
+              stdout: data.stdout, stderr: data.stderr, traceback: data.traceback, identity: data.identity };
+            else if (data.scene !== null) throw protocolError('failed Python result contains scene geometry');
+            else result = { python: true, ok: false, scene: null, stdout: data.stdout,
+              stderr: data.stderr, traceback: data.traceback, identity: data.identity };
+          } else {
+            result = { scene: validateScene(data.scene).scene, identity: data.identity };
+          }
         } catch (error) {
           return finish(error instanceof Error ? error : protocolError('invalid scene result'));
         }
         if (exitSeen) finish(exitCode === 0 ? null : protocolError(`Blender exited with status ${exitCode}`),
-          exitCode === 0 ? { scene: result, identity: data.identity } : undefined);
+          exitCode === 0 ? result : undefined);
         return;
       }
       if (data.type === 'exit') {
@@ -213,7 +277,7 @@ export async function runBlenderScene(commands, { signal, onStatus, onOutput } =
         exitSeen = true;
         exitCode = data.status;
         if (exitCode !== 0) return finish(protocolError(`Blender exited with status ${exitCode}`));
-        if (result) finish(null, { scene: result, identity: identityRecord });
+        if (result) finish(null, result);
         return;
       }
       if (data.type === 'error') {

@@ -1,4 +1,5 @@
 import { WASI, WASIProcExit, File, Directory, OpenFile, PreopenDirectory, wasi as wasiDefs } from "../browser-wasi-shim/dist/index.js";
+import { notifyProgress } from "../asset-loading.js";
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 const MAX_TIMEOUT_MS = 600_000;
@@ -95,7 +96,7 @@ function makeWorker() {
 }
 
 /** Run a standalone WASI command module in a disposable worker and in-memory filesystem. */
-export function runWasiTool({ moduleBytes, args, files, signal, onOutput, onTrace, timeoutMs = DEFAULT_TIMEOUT_MS, memory } = {}) {
+export function runWasiTool({ moduleBytes, args, files, signal, onOutput, onTrace, onProgress, timeoutMs = DEFAULT_TIMEOUT_MS, memory } = {}) {
   if (!(moduleBytes instanceof Uint8Array) || moduleBytes.byteLength === 0) return Promise.reject(new TypeError("moduleBytes must be a non-empty Uint8Array"));
   if (moduleBytes.byteLength > MAX_MODULE_BYTES) return Promise.reject(new RangeError(`moduleBytes exceeds ${MAX_MODULE_BYTES} bytes`));
   if (!Array.isArray(args) || args.length > MAX_ARGS || args.some((arg) => typeof arg !== "string" || encoder.encode(arg).byteLength > 16 * 1024)) return Promise.reject(new TypeError(`args must contain at most ${MAX_ARGS} bounded strings`));
@@ -108,10 +109,34 @@ export function runWasiTool({ moduleBytes, args, files, signal, onOutput, onTrac
   }
   if (signal?.aborted) return Promise.reject(new DOMException("Compiler run aborted", "AbortError"));
   if (typeof SharedArrayBuffer !== "function" || !globalThis.crossOriginIsolated) return Promise.reject(new Error("WASI compiler requires cross-origin isolation and SharedArrayBuffer"));
+  let activePhase = null;
+  const initializeProgress = (state, error = null) => {
+    if (state === "start" || state === "update") activePhase = "initialize";
+    else if (activePhase === "initialize") activePhase = null;
+    notifyProgress(onProgress, {
+      phase: "initialize", asset: "rustc-compiler", state,
+      loadedBytes: null, totalBytes: null, source: "work", error,
+    });
+  };
+  initializeProgress("start");
+  if (signal?.aborted) {
+    initializeProgress("cancelled");
+    return Promise.reject(new DOMException("Compiler run aborted", "AbortError"));
+  }
   let fs;
-  try { fs = toFileMap(files); } catch (error) { return Promise.reject(error); }
+  try { fs = toFileMap(files); } catch (error) {
+    initializeProgress("error", error instanceof Error ? error.message : String(error));
+    return Promise.reject(error);
+  }
+  if (signal?.aborted) {
+    initializeProgress("cancelled");
+    return Promise.reject(new DOMException("Compiler run aborted", "AbortError"));
+  }
   let worker;
-  try { worker = makeWorker(); } catch (error) { return Promise.reject(error); }
+  try { worker = makeWorker(); } catch (error) {
+    initializeProgress("error", error instanceof Error ? error.message : String(error));
+    return Promise.reject(error);
+  }
 
   return new Promise((resolve, reject) => {
     const output = { stdout: "", stderr: "" };
@@ -135,6 +160,17 @@ export function runWasiTool({ moduleBytes, args, files, signal, onOutput, onTrac
     const finish = (error, exitCode) => {
       if (settled) return;
       settled = true;
+      if (activePhase) {
+        const state = error ? "error" : "complete";
+        const phase = activePhase;
+        activePhase = null;
+        if (phase === "initialize") initializeProgress(state, error ? error.message : null);
+        else notifyProgress(onProgress, {
+          phase, asset: "rustc-compiler", state,
+          loadedBytes: null, totalBytes: null, source: "work",
+          error: error ? error.message : null,
+        });
+      }
       dispose();
       if (error) reject(error);
       else {
@@ -142,8 +178,22 @@ export function runWasiTool({ moduleBytes, args, files, signal, onOutput, onTrac
         catch (collectError) { reject(collectError); }
       }
     };
-    const abort = () => finish(new DOMException("Compiler run aborted", "AbortError"));
-    const onError = (event) => finish(new Error(`WASI compiler worker failed: ${event.message || "unknown worker error"}`));
+    const abort = () => {
+      if (activePhase === "initialize") initializeProgress("cancelled");
+      else if (activePhase) {
+        const phase = activePhase;
+        activePhase = null;
+        notifyProgress(onProgress, {
+          phase, asset: "rustc-compiler", state: "cancelled",
+          loadedBytes: null, totalBytes: null, source: "work", error: null,
+        });
+      }
+      finish(new DOMException("Compiler run aborted", "AbortError"));
+    };
+    const onError = (event) => {
+      const error = new Error(`WASI compiler worker failed: ${event.message || "unknown worker error"}`);
+      finish(error);
+    };
 
     const createThread = (tid, arg, memoryObject, moduleObject, imports) => {
       if (threads.size >= MAX_THREADS) return false;
@@ -213,30 +263,49 @@ export function runWasiTool({ moduleBytes, args, files, signal, onOutput, onTrac
       else if (event.data?.type === "thread-done") {
         threads.get(event.data.tid)?.worker.terminate();
         threads.delete(event.data.tid);
-      } else if (event.data?.type === "failure") finish(new Error(`WASI thread failed: ${String(event.data.error).slice(0, 2048)}`));
+      } else if (event.data?.type === "failure") {
+        const error = new Error(`WASI thread failed: ${String(event.data.error).slice(0, 2048)}`);
+        finish(error);
+      }
     };
     const receive = (event) => {
       const message = event.data;
-      if (message?.type === "ready") {
-        moduleObject = message.module;
-        imports = message.imports;
-        const memoryObject = message.memory;
-        wasi = new WASI(args, [], [new OpenFile(new File(new Uint8Array(0), { readonly: true })),
-          new (class extends OpenFile { constructor() { super(new File(new Uint8Array(0))); this.fd_write = (bytes) => { const text = new TextDecoder().decode(bytes); append("stdout", text); return { ret: 0, nwritten: bytes.byteLength }; }; } })(),
-          new (class extends OpenFile { constructor() { super(new File(new Uint8Array(0))); this.fd_write = (bytes) => { const text = new TextDecoder().decode(bytes); append("stderr", text); return { ret: 0, nwritten: bytes.byteLength }; }; } })(),
-          new PreopenDirectory("/", fs.root.contents),
-        ]);
-        wasi.inst = { exports: { memory: memoryObject } };
-        // The shim's synchronous poll implementation busy-waits on the UI thread.
-        // Fail boundedly instead of freezing the page for arbitrary guest timeouts.
-        wasi.wasiImport.poll_oneoff = () => 58;
-        wasi.wasiImport.fd_write = boundedFdWrite(wasi.wasiImport.fd_write.bind(wasi.wasiImport));
-        const rpc = new SharedArrayBuffer(8);
-        const state = new Int32Array(rpc);
-        worker.postMessage({ type: "start", rpc });
-        workerRpc = { rpc, state };
+      if (message?.type === "progress") {
+        if (!settled && !signal?.aborted) {
+          if (message.state === "start" || message.state === "update") activePhase = message.phase;
+          else if (message.state === "complete" || message.state === "error" || message.state === "cancelled") activePhase = null;
+          notifyProgress(onProgress, message);
+        }
+      } else if (message?.type === "ready") {
+        try {
+          moduleObject = message.module;
+          imports = message.imports;
+          const memoryObject = message.memory;
+          wasi = new WASI(args, [], [new OpenFile(new File(new Uint8Array(0), { readonly: true })),
+            new (class extends OpenFile { constructor() { super(new File(new Uint8Array(0))); this.fd_write = (bytes) => { const text = new TextDecoder().decode(bytes); append("stdout", text); return { ret: 0, nwritten: bytes.byteLength }; }; } })(),
+            new (class extends OpenFile { constructor() { super(new File(new Uint8Array(0))); this.fd_write = (bytes) => { const text = new TextDecoder().decode(bytes); append("stderr", text); return { ret: 0, nwritten: bytes.byteLength }; }; } })(),
+            new PreopenDirectory("/", fs.root.contents),
+          ]);
+          wasi.inst = { exports: { memory: memoryObject } };
+          // The shim's synchronous poll implementation busy-waits on the UI thread.
+          // Fail boundedly instead of freezing the page for arbitrary guest timeouts.
+          wasi.wasiImport.poll_oneoff = () => 58;
+          wasi.wasiImport.fd_write = boundedFdWrite(wasi.wasiImport.fd_write.bind(wasi.wasiImport));
+          const rpc = new SharedArrayBuffer(8);
+          const state = new Int32Array(rpc);
+          worker.postMessage({ type: "start", rpc });
+          workerRpc = { rpc, state };
+          initializeProgress("complete");
+        } catch (error) {
+          const failure = error instanceof Error ? error : new Error(String(error));
+          initializeProgress("error", failure.message);
+          finish(failure);
+        }
       } else if (message?.type === "result") finish(undefined, message.exitCode);
-      else if (message?.type === "failure") finish(new Error(`WASI compiler failed: ${String(message.error).slice(0, 2048)}`));
+      else if (message?.type === "failure") {
+        const error = new Error(`WASI compiler failed: ${String(message.error).slice(0, 2048)}`);
+        finish(error);
+      }
       else if (message?.type === "output") append(message.stream, message.text);
       else if (message?.type === "rpc") handleRpc(event, worker, workerRpc.rpc, false);
       else if (message?.type === "thread-done") {
@@ -369,7 +438,9 @@ export function runWasiTool({ moduleBytes, args, files, signal, onOutput, onTrac
     try {
       worker.postMessage({ type: "compile", bytes: isolatedModule.buffer, memory: { initialPages, maximumPages } }, [isolatedModule.buffer]);
     } catch (error) {
-      finish(error instanceof Error ? error : new Error(String(error)));
+      const failure = error instanceof Error ? error : new Error(String(error));
+      if (activePhase === "initialize") initializeProgress("error", failure.message);
+      finish(failure);
     }
   });
 }

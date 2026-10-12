@@ -315,6 +315,7 @@ export function createScenePreview(host, { loadViewer = () => import(new URL(VIE
         if (!moduleReady || disposed || token !== generation) return summary;
         if (!win.customElements.get("model-viewer")) throw new Error("The local model-viewer component did not register.");
         const element = doc.createElement("model-viewer");
+        element.setAttribute("loading", "eager");
         element.setAttribute("camera-controls", "");
         element.setAttribute("interaction-prompt", "none");
         element.setAttribute("camera-orbit", INITIAL_ORBIT);
