@@ -5,7 +5,28 @@
 (() => {
   "use strict";
 
-  let reloadKey;
+  const setupMarker = "__blr_coi_setup=1";
+  const removeSetupMarker = (href) => {
+    const hashIndex = href.indexOf("#");
+    const base = hashIndex < 0 ? href : href.slice(0, hashIndex);
+    const hash = hashIndex < 0 ? "" : href.slice(hashIndex);
+    const queryIndex = base.indexOf("?");
+    if (queryIndex < 0) return { attempted: false, href };
+    const lastAmp = base.lastIndexOf("&");
+    const componentStart = lastAmp > queryIndex ? lastAmp + 1 : queryIndex + 1;
+    if (base.slice(componentStart) !== setupMarker) return { attempted: false, href };
+    const cleanBase = lastAmp > queryIndex ? base.slice(0, lastAmp) : base.slice(0, queryIndex);
+    return { attempted: true, href: `${cleanBase}${hash}` };
+  };
+
+  const addSetupMarker = (href) => {
+    const hashIndex = href.indexOf("#");
+    const base = hashIndex < 0 ? href : href.slice(0, hashIndex);
+    const hash = hashIndex < 0 ? "" : href.slice(hashIndex);
+    const separator = base.includes("?") ? "&" : "?";
+    return `${base}${separator}${setupMarker}${hash}`;
+  };
+
   const ready = (async () => {
     const fail = (message) => {
       throw new Error(`BLR cross-origin isolation: ${message}`);
@@ -21,7 +42,23 @@
     const script = new URL(scriptUrl, location.href);
     const scopeUrl = new URL("./", script);
     const scopePath = scopeUrl.pathname;
-    reloadKey = `blr-coi-reload:${scopePath}:${location.pathname}${location.search}`;
+    const setup = removeSetupMarker(location.href);
+    const originalUrl = new URL(setup.href);
+    const legacyReloadKey = `blr-coi-reload:${scopePath}:${originalUrl.pathname}${originalUrl.search}`;
+    if (setup.attempted) {
+      try {
+        window.history.replaceState(window.history.state, "", setup.href);
+      } catch (error) {
+        fail(`the one-time setup marker could not be removed from this URL (${error instanceof Error ? error.message : String(error)}). Open the demo directly in a new tab and reload normally.`);
+      }
+    }
+    // Clear the exact legacy key left by an older bootstrap. The URL marker
+    // now bounds the automatic setup attempt.
+    try {
+      sessionStorage.removeItem(legacyReloadKey);
+    } catch {
+      // URL state bounds the setup attempt without depending on session storage.
+    }
 
     if (window.crossOriginIsolated === true) {
       if (typeof SharedArrayBuffer === "undefined") {
@@ -32,23 +69,25 @@
     if (window.crossOriginIsolated === undefined) {
       fail("this browser does not support cross-origin isolation.");
     }
+    if (setup.attempted) {
+      if (!navigator.serviceWorker?.controller) {
+        fail(`the browser did not route the setup navigation through the BLR service worker. Use a normal reload, check that service workers are allowed for this site, then open ${scopeUrl.href} directly in a new tab if isolation remains unavailable.`);
+      }
+      fail(`the setup navigation was controlled, but browser isolation remains disabled. Open ${scopeUrl.href} directly in a new tab, or check whether the embedding page or browser policy allows cross-origin isolation.`);
+    }
+    if (window.top !== window) {
+      let topLevelIsolated;
+      try {
+        topLevelIsolated = window.top.crossOriginIsolated;
+      } catch {
+        // A cross-origin ancestor may hide its isolation state; try one setup.
+      }
+      if (topLevelIsolated === false) {
+        fail(`the top-level page is not cross-origin isolated. Open ${scopeUrl.href} directly in a new tab, or allow cross-origin isolation in the embedding page.`);
+      }
+    }
     if (!navigator.serviceWorker) {
       fail("service workers are unavailable; use a current browser in a normal (non-private) window.");
-    }
-
-    let reloadAttempted;
-    try {
-      reloadAttempted = sessionStorage.getItem(reloadKey) === "1";
-    } catch {
-      fail("session storage is unavailable, so a safe one-time setup reload cannot be tracked.");
-    }
-    if (reloadAttempted) {
-      try {
-        sessionStorage.removeItem(reloadKey);
-      } catch {
-        // The failure is still reported; a fresh tab gives the user a new session.
-      }
-      fail("isolation is still unavailable after the one setup reload. Check the /blr/ service-worker response and CSP, then reload manually to retry.");
     }
 
     let registration;
@@ -89,28 +128,16 @@
       fail(`could not install the /blr/ service worker (${error instanceof Error ? error.message : String(error)}). Check HTTPS, browser service-worker settings, and the /blr/ scope.`);
     }
 
-    // On a first visit the registration controls future navigations. Reload the
-    // current document exactly once so its response receives COOP and COEP.
-    try {
-      sessionStorage.setItem(reloadKey, "1");
-    } catch {
-      fail("session storage became unavailable before the setup reload.");
-    }
+    // A distinct URL forces a service-worker navigation. Its marker survives a
+    // COOP browsing-group switch and is removed by the next document.
     if (!registration) fail("the /blr/ service worker did not register.");
-    location.reload();
+    location.replace(addSetupMarker(location.href));
     return new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("BLR cross-origin isolation: the setup reload did not navigate. Reload this page manually once.")), 10000);
+      setTimeout(() => reject(new Error("BLR cross-origin isolation: the one-time setup navigation did not complete. Use a normal reload, then open the demo directly in a new tab if isolation remains unavailable.")), 10000);
     });
   })();
 
-  window.blrIsolationReady = ready.then((result) => {
-    try {
-      if (reloadKey) sessionStorage.removeItem(reloadKey);
-    } catch {
-      // Isolation is already proven; inability to clear the retry marker is safe.
-    }
-    return result;
-  });
+  window.blrIsolationReady = ready;
   // Mark the public promise handled immediately; consumers still receive the
   // original rejection when they await or catch this promise later.
   window.blrIsolationReady.catch(() => {});

@@ -473,8 +473,8 @@
     },
     {
       "path": "isolation.js",
-      "size": 4967,
-      "sha256": "2626e94539ce11aead9727d04e31b66deecb50c917b0723ad16dbe3f12b00a34"
+      "size": 6928,
+      "sha256": "81c8035b48734e09f05cb26bdc6d0fd0739adfb07dc4eba6cecc6bfd6c7cb4d1"
     },
     {
       "path": "LICENSE-APACHE",
