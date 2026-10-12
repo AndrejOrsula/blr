@@ -8,13 +8,13 @@
     },
     {
       "path": "app.css",
-      "size": 14057,
-      "sha256": "6b022d48a64c53f06ca873f1d57142989935b6670f7589ef9cc0291c93747acc"
+      "size": 15724,
+      "sha256": "44c3542d94ac480d32476dc9f987510e24e476ec11e4df3293fcab7b5f4d124d"
     },
     {
       "path": "app.js",
-      "size": 27774,
-      "sha256": "ce4f5caa73cddc863739ef7a6e5ea86f7c7efd0375d5623fa50529cd247889f8"
+      "size": 55160,
+      "sha256": "179c0e15f118439ab07fef565f61f126c998d5e25576c7458f3e984c50c0c34e"
     },
     {
       "path": "blender-runner.js",
@@ -442,9 +442,24 @@
       "sha256": "15cadf64891d0f145aab905b0192e59aabe76b21d2ab9acd7ef01670af8b8ea3"
     },
     {
+      "path": "gui-frame.html",
+      "size": 826,
+      "sha256": "00cf54d2d27ce8ef9dc731a3243bedb06ebae8b98dac62834326d6edacc95f47"
+    },
+    {
+      "path": "gui-frame.js",
+      "size": 10909,
+      "sha256": "eb6abb7b64880a66567f5b684fb9f3f64580f1b612c2a0f3e77ac575475c448b"
+    },
+    {
+      "path": "gui-transport.js",
+      "size": 27156,
+      "sha256": "633657936b1a850d750644b095c62be6149eca179e839eed58407bd07085e242"
+    },
+    {
       "path": "index.html",
-      "size": 9083,
-      "sha256": "7fecdef6a9e75fe4f5dd81c4b6861da032b6ec7070369bdbed74242289c069f7"
+      "size": 10558,
+      "sha256": "536b4cafc896b774891f714846441a109d1f36e07202ea514097a59ae2c05267"
     },
     {
       "path": "isolation.js",
@@ -495,6 +510,71 @@
       "path": "runtime-licenses/cpython-3.13.13-LICENSE.txt",
       "size": 13809,
       "sha256": "78b12c3a81360b357002334f0e70ea0e92eebf7a9b358805c03c48484945f3bb"
+    },
+    {
+      "path": "runtime-licenses/gui/abseil/LICENSE",
+      "size": 11361,
+      "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+    },
+    {
+      "path": "runtime-licenses/gui/dawn/LICENSE",
+      "size": 1561,
+      "sha256": "e2908f7576fb12be5bdb8480cddb0be62badb498cadb821d043aeaf01b0b0899"
+    },
+    {
+      "path": "runtime-licenses/gui/emdawnwebgpu/webgpu_cpp/LICENSE",
+      "size": 1561,
+      "sha256": "7e1efc85a78732a13d7ddfc8b52912da7c8f8d3c6d334624b20e3f3a96297de0"
+    },
+    {
+      "path": "runtime-licenses/gui/emdawnwebgpu/webgpu/src/LICENSE",
+      "size": 3291,
+      "sha256": "2f79bf3699b0870251255b381670237f73f21a04a38c094f791eba39c5fd1df7"
+    },
+    {
+      "path": "runtime-licenses/gui/glslang/gl_types.h.NOTICE",
+      "size": 1079,
+      "sha256": "56dc9a4bea1129e8d9653a6e5c391b75de33cd518ee1a7fd01d6f73ccdc33669"
+    },
+    {
+      "path": "runtime-licenses/gui/glslang/LICENSE.txt",
+      "size": 54615,
+      "sha256": "17e70c676e1521ff3e4686f04a2053d93a7e28a33be8de7ec37ab0ff72feb677"
+    },
+    {
+      "path": "runtime-licenses/gui/index.html",
+      "size": 3498,
+      "sha256": "b40a0801edff362486e7133def3858dd684a6f30526126c11d770b300b5b0ee7"
+    },
+    {
+      "path": "runtime-licenses/gui/shaderc/LICENSE",
+      "size": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "runtime-licenses/gui/shaderc/third_party/LICENSE.glslang",
+      "size": 8280,
+      "sha256": "b5a00e94f058edc87e05978329b55730d8689abe61205d9018443d03de4f07da"
+    },
+    {
+      "path": "runtime-licenses/gui/shaderc/third_party/LICENSE.spirv-tools",
+      "size": 11650,
+      "sha256": "47e20ce182bc68fab1a0cfb129b03c326aaf4f2b6b7905aa9d376d31018bd29f"
+    },
+    {
+      "path": "runtime-licenses/gui/spirv-headers/LICENSE",
+      "size": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "runtime-licenses/gui/spirv-headers/src/LICENSE",
+      "size": 23503,
+      "sha256": "ea43b1de38a6f90c488800d66dec1ed671e68cda530266bc96951fb5b6307613"
+    },
+    {
+      "path": "runtime-licenses/gui/spirv-tools/LICENSE",
+      "size": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     },
     {
       "path": "runtime-licenses/LLVM-exception.txt",
@@ -1253,8 +1333,8 @@
     },
     {
       "path": "runtime-notices.html",
-      "size": 4289,
-      "sha256": "15cf10a2b1a230cb5aa1b4ead05ab9a6c8ca12e1185934c915e16f9760bfad28"
+      "size": 4976,
+      "sha256": "faacfda08e112139e24daf3eb3e3d497220486f69aacd17ad49e857abfa1a5dc"
     },
     {
       "path": "runtime/blender.js",
@@ -1265,6 +1345,21 @@
       "path": "runtime/blender.wasm.gz",
       "size": 32979348,
       "sha256": "935831c7fc04b4d3191fdeb2faac115a6454d753338bfb63d60dd2b6c6e284ad"
+    },
+    {
+      "path": "runtime/gui/blender.js",
+      "size": 317487,
+      "sha256": "d844ef32a8cad2bd4c80b570b7190518728a44c9aa96e916fb41571258f4d0cb"
+    },
+    {
+      "path": "runtime/gui/blender.wasm.gz",
+      "size": 60226717,
+      "sha256": "4af3f31a92c8658236115c9c9ba59e86771db020b5b5e14b531a2bd684744e03"
+    },
+    {
+      "path": "runtime/gui/manifest.json",
+      "size": 428,
+      "sha256": "044f1b26b6970d2b46c9693334c7eb0787bada051ecbc4b2242de60f5f9cf314"
     },
     {
       "path": "runtime/manifest.json",

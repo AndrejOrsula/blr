@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebGPU GUI dependency notices · BLR</title>
+</head>
+<body>
+  <main>
+    <h1>WebGPU GUI dependency notices</h1>
+    <p><a href="../../runtime-notices.html">Runtime license notices</a></p>
+    <p>These license and notice files were copied byte-for-byte from the exact pinned build inputs listed below. Commit links identify the source revision used for the GUI build; they provide provenance, while the local files provide the license and notice text.</p>
+
+    <h2>Shader compilation</h2>
+    <ul>
+      <li><a href="https://github.com/google/shaderc/tree/caa54d9779d5605aca4e1a0c0c962a3d8f4aeb31">shaderc v2024.4, commit caa54d9779d5605aca4e1a0c0c962a3d8f4aeb31</a>: <a href="./shaderc/LICENSE">LICENSE</a>.</li>
+      <li><a href="https://chromium.googlesource.com/external/github.com/KhronosGroup/glslang/+/aa8e19e05f8b30d14b894fb2d94875bb6c8be3c6/">glslang commit aa8e19e05f8b30d14b894fb2d94875bb6c8be3c6</a>: <a href="./glslang/LICENSE.txt">LICENSE.txt</a> and the separate <a href="./glslang/gl_types.h.NOTICE">gl_types.h notice</a>, applicable to code in the linked glslang archive.</li>
+      <li>Shaderc’s source bundle also carries these upstream license texts: <a href="./shaderc/third_party/LICENSE.glslang">glslang</a> and <a href="./shaderc/third_party/LICENSE.spirv-tools">SPIRV-Tools</a>.</li>
+    </ul>
+
+    <h2>Dawn, Tint, and support libraries</h2>
+    <ul>
+      <li><a href="https://dawn.googlesource.com/dawn/+/31e25af254ab572c77054edec4946d2244e184dd/">Dawn/Tint commit 31e25af254ab572c77054edec4946d2244e184dd</a>: <a href="./dawn/LICENSE">LICENSE</a>.</li>
+      <li><a href="https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp/+/dd4432fb02583b7a5b2b4fbf2012f7053e286ce0/">Abseil commit dd4432fb02583b7a5b2b4fbf2012f7053e286ce0</a>: <a href="./abseil/LICENSE">LICENSE</a>.</li>
+      <li><a href="https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools/+/ff5c50339cc1e9f34f04cb440a3e5fe89db0161d/">SPIRV-Tools commit ff5c50339cc1e9f34f04cb440a3e5fe89db0161d</a>: <a href="./spirv-tools/LICENSE">LICENSE</a>.</li>
+      <li><a href="https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers/+/ad9184e76a66b1001c29db9b0a3e87f646c64de0/">SPIRV-Headers commit ad9184e76a66b1001c29db9b0a3e87f646c64de0</a>: <a href="./spirv-headers/LICENSE">repository LICENSE</a> and <a href="./spirv-headers/src/LICENSE">src/LICENSE</a>.</li>
+    </ul>
+
+    <h2>Browser WebGPU bindings</h2>
+    <ul>
+      <li><a href="https://github.com/google/dawn/releases/tag/v20260423.175430">emdawnwebgpu v20260423.175430</a>, distributed in <a href="https://github.com/google/dawn/releases/download/v20260423.175430/emdawnwebgpu_pkg-v20260423.175430.zip">the pinned release package</a>: <a href="./emdawnwebgpu/webgpu_cpp/LICENSE">webgpu_cpp/LICENSE</a> and <a href="./emdawnwebgpu/webgpu/src/LICENSE">webgpu/src/LICENSE</a>. The downloaded package SHA-256 is <code>3ad7ebe95a4a20764df46c5a63b0ad489782aee26804fff8511d9797c10e732f</code>.</li>
+    </ul>
+
+    <p>The Blender 5.2 third-party license inventory linked from the runtime notice already lists its bundled GUI font families, including Inter, Noto, Last Resort, and DejaVu Sans Mono. Blender’s existing license notice remains linked for Blender-owned UI assets. These materials are not duplicated here.</p>
+  </main>
+</body>
+</html>

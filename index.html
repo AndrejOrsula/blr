@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101822">
-  <meta name="description" content="Edit Rust examples, compile them in your browser, and preview meshes created by Blender and blr.">
+  <meta name="description" content="Edit Rust examples, create and edit Blender scenes in your browser, or switch to the GLB mesh preview.">
   <title>BLR · Rust and Blender playground</title>
   <link rel="stylesheet" href="./app.css">
   <script src="./isolation.js"></script>
@@ -25,7 +25,7 @@
       <div class="intro-copy">
         <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> Experimental · runs locally in your browser</p>
         <h1 id="page-title">Write Rust.<br><span>See Blender geometry.</span></h1>
-        <p class="lede">Edit a Rust example, compile it to a bounded WebAssembly guest, then run its scene commands through Blender 5.2.0 and blr. Inspect the returned mesh in an interactive browser preview.</p>
+        <p class="lede">Edit a Rust example, compile it to a bounded WebAssembly guest, then run its scene commands through Blender 5.2.0 and blr. Edit the result in Blender's browser workspace or switch to the selectable GLB preview.</p>
         <a class="text-link" href="./showcase/">Explore the finished examples <span aria-hidden="true">↗</span></a>
       </div>
       <div class="hero-art" aria-hidden="true">
@@ -65,17 +65,31 @@
 
         <section class="viewport-pane" aria-labelledby="viewport-title">
           <div class="pane-heading viewport-heading">
-            <div><h3 id="viewport-title">Blender mesh preview</h3><p>Geometry reported by the Blender runtime</p></div>
+            <div><h3 id="viewport-title">Blender workspace and mesh preview</h3><p>Choose the editable Blender UI or the GLB preview</p></div>
             <span class="preview-badge" id="preview-badge">Waiting for a run</span>
+          </div>
+          <div class="preview-mode-row">
+            <div class="preview-modes" role="group" aria-label="Preview mode">
+              <button type="button" id="mode-blender" aria-pressed="true">Blender editor</button>
+              <button type="button" id="mode-glb" aria-pressed="false">GLB preview</button>
+            </div>
+            <span class="mode-help" id="mode-help">Blender UI requires the supported WebGPU runtime.</span>
           </div>
           <div class="viewport-frame" id="preview-host">
             <div class="viewport-empty" id="viewport-empty">
               <div class="empty-cube" aria-hidden="true"><svg viewBox="0 0 80 76"><path d="m40 6 31 17v31L40 71 9 54V23zM9 23l31 18 31-18M40 41v30"/></svg></div>
               <p id="viewport-message">Your Blender-created mesh will appear here.</p>
-              <span>Browser preview · not Blender desktop or a Blender render</span>
+              <span>Browser-hosted Blender 5.2 workspace</span>
             </div>
+            <div class="blender-gui-host" id="blender-gui-host" hidden title="Blender 5.2 workspace"></div>
+            <div class="glb-preview-host" id="glb-preview-host" hidden></div>
           </div>
           <div class="viewport-toolbar" aria-label="Preview controls">
+            <button type="button" id="start-blender" disabled>Start Blender</button>
+            <button type="button" id="snapshot-glb" disabled>Snapshot / Update GLB</button>
+            <button type="button" id="clear-generated" disabled>Clear generated objects</button>
+            <button type="button" id="close-blender" disabled>Close Blender editor</button>
+            <button type="button" id="fullscreen-blender" disabled>Fullscreen editor</button>
             <button type="button" id="orbit-left" disabled aria-label="Orbit left">↶ <span>Orbit</span></button>
             <button type="button" id="orbit-right" disabled aria-label="Orbit right">↷ <span>Orbit</span></button>
             <button type="button" id="zoom-in" disabled aria-label="Zoom in">＋ <span>Zoom</span></button>
@@ -108,8 +122,8 @@
     <section class="about-section" id="about" aria-labelledby="about-title">
       <div class="about-heading"><p class="eyebrow">03 / What this is</p><h2 id="about-title">Rust in.<br>Blender out.</h2></div>
       <div class="about-copy">
-        <p>The editor compiles a bounded Rust guest for WebAssembly and sends its scene-command output to a fresh Blender runtime frame. Blender and blr create the mesh; the browser viewer maps scene colors to preview materials and displays the returned world-space geometry with browser lighting.</p>
-        <p>Editable programs use the visible <code>blr_demo.rs</code> helper, a limited browser authoring API. They can use Rust's bundled standard library, but not native blr library sources or arbitrary Cargo dependencies. Those private sources stay private. Scene colors become browser preview materials, and browser lighting does not reproduce Blender's renderer or desktop interface. Compiler and Blender assets load only after you run the program.</p>
+        <p>The editor compiles bounded Rust commands for Blender 5.2. In Blender mode, each Rust run creates generated objects in the persistent workspace. Choose Clear generated objects before another Rust run; this keeps other Blender objects. Canceling a run or switching preview modes keeps the editor and its edits open. Choose Snapshot / Update GLB after editing to export the Rust-generated objects with your edits. Separately created Blender objects are not included. Switch to GLB preview or download the snapshot. The preserved headless path can also create a GLB preview.</p>
+        <p>Programs use the visible <code>blr_demo.rs</code> helper, which supports six primitive kinds, transforms, tint metadata and up to 64 objects. It uses Rust's bundled standard library, not private native blr sources or arbitrary Cargo dependencies. Blender's Workbench viewport uses gray Solid shading; the GLB snapshot turns tint metadata into browser materials. These views do not provide EEVEE or Cycles rendering. Compiler and Blender assets load only after you start the editor or run a program.</p>
         <div class="about-links"><a href="./showcase/">Browse finished examples <span aria-hidden="true">↗</span></a><a href="./blr_demo.rs">Browser demo helper source</a><a href="./runtime-notices.html">Blender runtime notices</a><a href="./compiler-notices.html">Rust compiler and sysroot notices</a><a href="./LICENSE-APACHE">Project license: Apache-2.0</a><a href="./LICENSE-MIT">Project license: MIT</a><a href="./vendor/NOTICE.html">Viewer third-party notices</a></div>
       </div>
     </section>

@@ -26,6 +26,14 @@ const runtimeNote = $("#runtime-note");
 const viewportEmpty = $("#viewport-empty");
 const viewportMessage = $("#viewport-message");
 const previewBadge = $("#preview-badge");
+const guiHost = $("#blender-gui-host");
+const glbHost = $("#glb-preview-host");
+const modeHelp = $("#mode-help");
+const startBlenderButton = $("#start-blender");
+const snapshotGlbButton = $("#snapshot-glb");
+const clearGeneratedButton = $("#clear-generated");
+const closeBlenderButton = $("#close-blender");
+const fullscreenBlenderButton = $("#fullscreen-blender");
 const stats = {
   objects: $("#stat-objects"),
   vertices: $("#stat-vertices"),
@@ -36,7 +44,9 @@ const stages = { compile: $("#stage-compile"), blender: $("#stage-blender"), pre
 let compileRust;
 let runBlenderScene;
 let createScenePreview;
+let createBlenderGui;
 let preview;
+let blenderGui;
 
 let examples = [];
 let activeExample = null;
@@ -44,6 +54,24 @@ let activeRun = null;
 let runSerial = 0;
 let draftTimer = 0;
 let ready = false;
+let previewMode = "blender";
+let guiAvailable = false;
+let guiFailure = "";
+let guiFatal = false;
+let guiDocumentInvalidated = false;
+let guiSnapshotPreviousDocument = false;
+let guiFrameVisible = false;
+let guiFrameWaiter = null;
+let guiPendingCreateRequestId = null;
+let guiCanceledCreateRequestId = null;
+let guiLeaseToken = null;
+let guiIdentity = null;
+let guiScenePresent = false;
+let guiSummary = null;
+let guiSnapshotPresent = false;
+let guiSnapshotFresh = false;
+let glbIdentity = null;
+let glbSummary = null;
 let currentPreview = false;
 let hasRunResult = false;
 let lastGuestBoundaryProof = null;
@@ -135,6 +163,16 @@ function selectExample(id) {
 
 function markResultStale() {
   if (!hasRunResult) return;
+  if (previewMode === "blender" && guiScenePresent) {
+    previewBadge.textContent = "Blender scene · source changed";
+    runtimeNote.textContent = "The editable Blender scene is unchanged. Run again to create another generated scene after clearing the current one.";
+    return;
+  }
+  if (previewMode === "glb" && guiSnapshotPresent) {
+    previewBadge.textContent = guiSnapshotFresh ? "GLB snapshot · current" : "GLB snapshot · stale";
+    runtimeNote.textContent = "Source changed. The GLB shows the Blender scene at snapshot time; run again to preview the current source.";
+    return;
+  }
   previewBadge.textContent = "Previous run";
   runtimeNote.textContent = "Source changed. Geometry and stats show the previous completed run; run again to update them.";
 }
@@ -153,6 +191,8 @@ function summarizeIdentity(identity) {
 }
 
 function setSceneSummary(summary, identity) {
+  glbSummary = summary;
+  glbIdentity = identity;
   stats.objects.textContent = String(summary.objects);
   stats.vertices.textContent = String(summary.vertices);
   stats.triangles.textContent = String(summary.triangles);
@@ -164,8 +204,399 @@ function setSceneSummary(summary, identity) {
   viewportEmpty.hidden = true;
 }
 
+function updateGuiActions() {
+  const mounted = Boolean(blenderGui);
+  const guiReady = mounted && blenderGui.ready === true && guiFrameVisible && !guiDocumentInvalidated;
+  startBlenderButton.disabled = !ready || !guiAvailable || guiFatal || guiDocumentInvalidated || Boolean(activeRun) || guiReady || Boolean(blenderGui?.busy);
+  startBlenderButton.textContent = guiReady ? "Blender initialized" : "Start Blender";
+  snapshotGlbButton.disabled = !guiReady || !guiLeaseToken || Boolean(blenderGui?.busy) || Boolean(activeRun);
+  clearGeneratedButton.disabled = !guiReady || !guiLeaseToken || Boolean(blenderGui?.busy) || Boolean(activeRun);
+  closeBlenderButton.disabled = !mounted;
+  fullscreenBlenderButton.disabled = !guiReady || Boolean(blenderGui?.busy) || Boolean(activeRun);
+  fullscreenBlenderButton.textContent = document.fullscreenElement === guiHost ? "Exit fullscreen" : "Fullscreen editor";
+  $("#mode-blender").disabled = (!guiAvailable && !mounted) || Boolean(activeRun);
+  $("#mode-glb").disabled = Boolean(activeRun);
+  $("#mode-blender").setAttribute("aria-pressed", String(previewMode === "blender"));
+  $("#mode-glb").setAttribute("aria-pressed", String(previewMode === "glb"));
+  if (previewMode === "blender") {
+    guiHost.hidden = false;
+    glbHost.hidden = true;
+    modeHelp.textContent = guiDocumentInvalidated
+      ? "Blender document changed; editor bridge is resuming. The previous document’s GLB snapshot is stale."
+      : guiFatal
+        ? `${guiFailure || "Blender runtime stopped safely."} Scene state is uncertain. The last validated GLB snapshot, if present, is stale.`
+        : guiAvailable
+        ? guiReady ? "Blender editor is ready. Run Rust to create generated objects; clear them before another run, or snapshot edits to those objects to GLB. Other Blender objects are not included." : "Start Blender to open the editable workspace; Run can also start it."
+        : `Blender UI unavailable${guiFailure ? `: ${guiFailure}` : ". Choose GLB preview to use the preserved headless workflow."}`;
+  } else {
+    guiHost.hidden = true;
+    glbHost.hidden = false;
+    modeHelp.textContent = guiSnapshotPresent
+      ? guiSnapshotFresh ? "GLB captured from the Rust-generated objects; other Blender objects are not included." : guiFatal ? "Last validated GLB snapshot; stale because Blender scene state is uncertain." : guiSnapshotPreviousDocument ? "This GLB snapshot belongs to the previous Blender document." : "This GLB snapshot is stale. Return to Blender and update it after editing the Rust-generated objects."
+      : "Run Rust in GLB mode for the headless preview, or create a Rust-generated scene in the Blender editor and snapshot its objects.";
+  }
+}
+
+function setPreviewMode(mode) {
+  if (mode !== "blender" && mode !== "glb") return;
+  if (mode === "blender" && !guiAvailable && !blenderGui) {
+    modeHelp.textContent = `Blender UI unavailable${guiFailure ? `: ${guiFailure}` : ". Choose GLB preview to continue."}`;
+    return;
+  }
+  if (mode === "blender" && previewMode === "glb" && guiScenePresent) {
+    guiSnapshotFresh = false;
+    if (guiSnapshotPresent) previewBadge.textContent = "GLB snapshot · stale after editing";
+  }
+  previewMode = mode;
+  if (mode === "glb" && guiSnapshotPresent) {
+    previewBadge.textContent = guiSnapshotFresh ? "GLB snapshot · current" : "GLB snapshot · stale";
+  }
+  if (mode === "blender" && guiScenePresent && guiSummary) {
+    displayGeometrySummary(guiSummary, guiIdentity);
+    previewBadge.textContent = "Blender editor · scene ready";
+    viewportEmpty.hidden = true;
+    currentPreview = false;
+    enablePreviewControls(false, Boolean(preview?.artifact()));
+  } else if (mode === "glb" && (guiSnapshotPresent || glbSummary)) {
+    displayGeometrySummary(glbSummary, glbIdentity);
+    viewportEmpty.hidden = true;
+  } else if (mode === "glb" && guiScenePresent) {
+    viewportEmpty.hidden = false;
+    viewportMessage.textContent = "No GLB snapshot yet. Choose Snapshot / Update GLB to capture edits to the Rust-generated objects. Other Blender objects are not included.";
+    previewBadge.textContent = "No GLB snapshot";
+    currentPreview = false;
+    enablePreviewControls(false, false);
+  } else if (mode === "glb" && !glbSummary) {
+    viewportEmpty.hidden = false;
+    viewportMessage.textContent = "No GLB preview yet. Run Rust in GLB mode or start Blender and take a scene snapshot.";
+    currentPreview = false;
+    enablePreviewControls(false, false);
+  } else if (mode === "blender") {
+    currentPreview = false;
+    enablePreviewControls(false, Boolean(preview?.artifact()));
+    viewportEmpty.hidden = guiFrameVisible;
+    if (guiFrameVisible) previewBadge.textContent = guiFatal ? "Blender scene state uncertain · editor retained" : "Blender editor ready · no generated scene";
+    for (const cell of Object.values(stats)) cell.textContent = "—";
+  }
+  updateGuiActions();
+}
+
+function updateGuiState(state) {
+  if (state && typeof state === "object") {
+    if (Object.hasOwn(state, "leaseToken")) guiLeaseToken = typeof state.leaseToken === "string" ? state.leaseToken : null;
+    else if (typeof blenderGui?.lease === "string") guiLeaseToken = blenderGui.lease;
+    if (state.visibleFrame === true || state.state === "frame-available") {
+      guiFrameVisible = true;
+      guiFrameWaiter?.resolve();
+      guiFrameWaiter = null;
+    }
+    if (state.state === "busy" && Number.isSafeInteger(state.requestId) && activeRun && previewMode === "blender") {
+      guiPendingCreateRequestId = state.requestId;
+    }
+    if (state.state === "invalidated" && state.fatal !== true) {
+      guiDocumentInvalidated = true;
+      guiSnapshotPreviousDocument = guiSnapshotPresent || Boolean(state.lastSnapshot);
+      guiAvailable = true;
+      guiFailure = "";
+      guiLeaseToken = null;
+      guiPendingCreateRequestId = null;
+      guiCanceledCreateRequestId = null;
+      guiScenePresent = false;
+      guiSummary = null;
+      if (state.lastSnapshotStale || guiSnapshotPresent) guiSnapshotFresh = false;
+      if (guiSnapshotPresent) previewBadge.textContent = "GLB snapshot · previous document";
+      runtimeNote.textContent = "Blender document changed. Waiting for the editor bridge to resume; the previous document’s GLB snapshot remains stale.";
+      appendDiagnostic("[Blender UI] Document changed; previous generated-scene lease cleared. Waiting for bridge recovery.");
+    } else if ((state.state === "document-ready" || state.state === "ready") && state.ready === true && guiDocumentInvalidated && state.fatal !== true) {
+      guiDocumentInvalidated = false;
+      guiAvailable = true;
+      guiFailure = "";
+      runtimeNote.textContent = "Blender editor bridge resumed after the document change. Run Rust to create a new generated scene.";
+      appendDiagnostic("[Blender UI] Editor bridge resumed after document load.");
+      if (state.lastSnapshot?.source === "create" && !state.lastSnapshotStale) syncActiveGuiScene(state.lastSnapshot);
+    } else if (state.fatal === true || state.state === "fatal" || state.state === "poisoned" || state.state === "failed") {
+      guiDocumentInvalidated = false;
+      guiFrameWaiter?.reject(new Error(state.message || "The Blender GUI runtime became unavailable."));
+      guiFrameWaiter = null;
+      guiAvailable = false;
+      guiFailure = state.message || "The Blender editor runtime became unavailable.";
+      guiFatal = state.fatal === true || state.state === "fatal" || state.state === "poisoned";
+      if (state.visibleFrame === true || blenderGui?.visibleFrame === true) guiFrameVisible = true;
+      guiLeaseToken = null;
+      if (guiFatal) {
+        guiScenePresent = false;
+        guiSummary = null;
+      }
+      if (guiSnapshotPresent || state.lastSnapshotStale) guiSnapshotFresh = false;
+      if (state.lastSnapshot?.scene) void showLastValidatedSnapshot(state.lastSnapshot);
+      runtimeNote.textContent = guiFatal
+        ? `${guiFailure} Blender scene state is uncertain. The editor remains open; close it explicitly to discard its contents.${guiSnapshotPresent || state.lastSnapshot?.scene ? " The last validated GLB snapshot remains available and is stale." : " No GLB snapshot is available."}`
+        : `${guiFailure} The Blender editor remains available for inspection; switch to GLB preview for the preserved headless path.`;
+      appendDiagnostic(`[Blender UI] ${guiFailure}`);
+    }
+    if (state.state === "ready" && state.ready === true && state.leaseToken && state.lastSnapshot?.source === "create" && !state.lastSnapshotStale) {
+      const afterCancel = state.requestId === guiCanceledCreateRequestId;
+      syncActiveGuiScene(state.lastSnapshot, { afterCancel });
+      if (state.requestId === guiPendingCreateRequestId) guiPendingCreateRequestId = null;
+      if (afterCancel) guiCanceledCreateRequestId = null;
+    }
+    if (state.state === "disposed") {
+      guiFrameWaiter?.reject(new Error("The Blender editor was closed before its canvas became available."));
+      guiFrameWaiter = null;
+      guiAvailable = false;
+      guiLeaseToken = null;
+      guiScenePresent = false;
+      guiSummary = null;
+      guiSnapshotFresh = false;
+      guiFrameVisible = false;
+    }
+  }
+  updateGuiActions();
+}
+
+function syncActiveGuiScene(snapshot, { afterCancel = false } = {}) {
+  if (!snapshot || typeof snapshot.leaseToken !== "string" || snapshot.leaseToken !== guiLeaseToken) return;
+  try {
+    const summary = summarizeScene(snapshot.scene);
+    guiScenePresent = true;
+    guiSummary = summary;
+    guiIdentity = snapshot.identity ?? guiIdentity;
+    if (guiSnapshotPresent) guiSnapshotFresh = false;
+    if (previewMode === "blender") {
+      displayGeometrySummary(summary, guiIdentity);
+      previewBadge.textContent = "Blender editor · scene ready";
+      viewportEmpty.hidden = true;
+      runtimeNote.textContent = afterCancel
+        ? "A Rust scene completed in Blender after its run was canceled. It is the active generated scene; clear generated objects before replacing it."
+        : "The active Rust scene is ready in Blender. Clear generated objects before replacing it.";
+    }
+    appendDiagnostic(`[Blender UI] Active generated scene confirmed from transport state · ${summary.objects} objects · ${summary.vertices} vertices · ${summary.triangles} triangles.`);
+  } catch (error) {
+    appendDiagnostic(`[Blender UI state error] ${errorText(error, "Could not summarize the active Blender scene.")}`);
+  }
+}
+
+async function showLastValidatedSnapshot(snapshot) {
+  try {
+    const summary = await preview.show(snapshot.scene);
+    guiSnapshotPresent = true;
+    guiSnapshotFresh = false;
+    guiIdentity = snapshot.identity ?? guiIdentity;
+    glbIdentity = snapshot.identity ?? glbIdentity;
+    glbSummary = summary;
+    displayGeometrySummary(summary, glbIdentity);
+    if (previewMode === "glb") {
+      viewportEmpty.hidden = true;
+      previewBadge.textContent = "Last validated GLB snapshot · stale";
+    }
+    updateGuiActions();
+  } catch (error) {
+    appendDiagnostic(`[Blender UI snapshot fallback error] ${errorText(error, "Could not display the last validated snapshot.")}`);
+  }
+}
+
+function summarizeScene(scene) {
+  if (!scene || scene.schema !== "blr-scene-v1" || !Array.isArray(scene.objects)) {
+    throw new Error("Blender returned no valid blr-scene-v1 geometry.");
+  }
+  return {
+    objects: scene.objects.length,
+    vertices: scene.objects.reduce((total, object) => total + object.positions.length, 0),
+    triangles: scene.objects.reduce((total, object) => total + object.triangles.length, 0),
+  };
+}
+
+function displayGeometrySummary(summary, identity) {
+  if (!summary) return;
+  stats.objects.textContent = String(summary.objects);
+  stats.vertices.textContent = String(summary.vertices);
+  stats.triangles.textContent = String(summary.triangles);
+  stats.version.textContent = summarizeIdentity(identity);
+  hasRunResult = true;
+}
+
+async function ensureBlenderGui({ signal } = {}) {
+  if (signal?.aborted) throw new DOMException("Blender GUI startup canceled", "AbortError");
+  if (!guiAvailable || typeof createBlenderGui !== "function") {
+    throw new Error(guiFailure || "The actual Blender browser editor is unavailable. Choose GLB preview for the preserved headless workflow.");
+  }
+  if (!blenderGui) {
+    blenderGui = createBlenderGui({
+      host: guiHost,
+      onStatus: (message) => {
+        if (typeof message === "string") runtimeNote.textContent = message.slice(0, 220);
+      },
+      onOutput: (record) => {
+        if (record && typeof record.text === "string") {
+          const stream = record.stream === "stderr" ? "stderr" : "stdout";
+          appendDiagnostic(`[Blender UI ${stream}] ${record.text.slice(0, 4000).replace(/[\r\n]+$/, "")}`);
+        }
+      },
+      onState: updateGuiState,
+    });
+  }
+  if (!blenderGui.ready) await blenderGui.start();
+  if (signal?.aborted) throw new DOMException("Blender GUI startup canceled", "AbortError");
+  if (!blenderGui.ready) throw new Error("Blender did not report an initialized editor runtime.");
+  guiLeaseToken = blenderGui.lease ?? guiLeaseToken;
+  if (blenderGui.visibleFrame === true) guiFrameVisible = true;
+  if (!guiFrameVisible) await waitForGuiFrame(signal);
+  updateGuiActions();
+  return blenderGui;
+}
+
+function waitForGuiFrame(signal) {
+  if (guiFrameVisible || blenderGui?.visibleFrame === true) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let timer;
+    const finish = (error) => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      guiFrameWaiter = null;
+      if (error) reject(error);
+      else resolve();
+    };
+    const onAbort = () => finish(new DOMException("Blender GUI startup canceled", "AbortError"));
+    guiFrameWaiter = { resolve: () => finish(), reject: (error) => finish(error) };
+    timer = window.setTimeout(() => finish(new Error("Blender initialized, but its browser canvas did not become available within 30 seconds.")), 30_000);
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function startBlender() {
+  if (!ready || activeRun || !guiAvailable) return;
+  startBlenderButton.disabled = true;
+  setPreviewMode("blender");
+  runtimeNote.textContent = "Starting the actual Blender 5.2 workspace…";
+  setPhase("Starting Blender editor", "running");
+  try {
+    await ensureBlenderGui();
+    viewportEmpty.hidden = true;
+    setPhase("Blender editor ready", "ready");
+    runtimeNote.textContent = "Blender editor is ready. Run Rust to create a generated scene. Clear generated objects before another run, or snapshot edits to those objects to GLB. Other Blender objects are not included.";
+    appendDiagnostic("[Blender UI] Workspace initialized. No scene objects were changed.");
+  } catch (error) {
+    guiFailure = errorText(error, "Blender editor initialization failed.");
+    guiAvailable = false;
+    setPreviewMode("glb");
+    setPhase("Blender editor unavailable", "error");
+    runtimeNote.textContent = `${guiFailure} Choose GLB preview to run through the preserved headless path.`;
+    appendDiagnostic(`[Blender UI error] ${guiFailure}`);
+  } finally {
+    updateGuiActions();
+  }
+}
+
+async function snapshotBlenderScene() {
+  if (!blenderGui?.ready || !guiLeaseToken || blenderGui.busy || activeRun) return;
+  const controller = new AbortController();
+  snapshotGlbButton.disabled = true;
+  runtimeNote.textContent = "Capturing the current editable Blender scene for GLB preview…";
+  try {
+    const result = await blenderGui.snapshot({ signal: controller.signal });
+    if (!result || result.leaseToken !== guiLeaseToken) throw new Error("Blender snapshot did not match the active generated-scene lease.");
+    setPreviewMode("glb");
+    const summary = await preview.show(result.scene);
+    guiIdentity = result.identity;
+    glbIdentity = result.identity;
+    glbSummary = summary;
+    guiSnapshotPresent = true;
+    guiSnapshotFresh = true;
+    guiSnapshotPreviousDocument = false;
+    hasRunResult = true;
+    displayGeometrySummary(summary, guiIdentity);
+    currentPreview = $("#preview-host model-viewer") !== null;
+    enablePreviewControls(currentPreview, Boolean(preview.artifact()));
+    previewBadge.textContent = previewMode === "glb" ? "GLB snapshot · current" : "Rust scene · GLB snapshot updated";
+    viewportEmpty.hidden = true;
+    runtimeNote.textContent = `GLB snapshot updated from Rust-generated Blender objects. Other Blender objects are not included. ${summary.objects} objects, ${summary.vertices} vertices, ${summary.triangles} triangles.`;
+    appendDiagnostic(`[snapshot] Rust-generated Blender objects copied to GLB preview · ${summary.objects} objects · ${summary.vertices} vertices · ${summary.triangles} triangles.`);
+    updateGuiActions();
+  } catch (error) {
+    const reason = errorText(error, "Blender snapshot failed.");
+    runtimeNote.textContent = guiFatal
+      ? `${reason} Blender scene state is uncertain; close the editor explicitly to discard it.`
+      : `${reason} The Blender scene remains open and editable.`;
+    appendDiagnostic(`[snapshot error] ${reason}`);
+  } finally {
+    updateGuiActions();
+  }
+}
+
+async function clearGeneratedObjects() {
+  if (!blenderGui?.ready || !guiLeaseToken || blenderGui.busy || activeRun) return;
+  clearGeneratedButton.disabled = true;
+  runtimeNote.textContent = "Removing only objects from the active Rust scene lease…";
+  try {
+    const clearingLease = guiLeaseToken;
+    const result = await blenderGui.reset({});
+    if (!result?.reset || result.leaseToken !== clearingLease) throw new Error("Blender did not confirm reset of the active generated-scene lease.");
+    guiLeaseToken = null;
+    guiScenePresent = false;
+    guiSummary = null;
+    guiIdentity = result.identity ?? guiIdentity;
+    if (guiSnapshotPresent) guiSnapshotFresh = false;
+    if (previewMode === "blender") {
+      for (const cell of Object.values(stats)) cell.textContent = "—";
+      hasRunResult = false;
+    }
+    previewBadge.textContent = guiSnapshotPresent ? "GLB snapshot · stale after reset" : "Generated objects cleared";
+    runtimeNote.textContent = `Cleared ${result.removed ?? 0} generated object${result.removed === 1 ? "" : "s"}. User-created Blender objects remain.`;
+    appendDiagnostic(`[Blender UI] Cleared generated objects · removed ${result.removed ?? 0} · missing ${result.missing ?? 0}.`);
+    updateGuiActions();
+  } catch (error) {
+    const reason = errorText(error, "Could not clear generated Blender objects.");
+    runtimeNote.textContent = guiFatal
+      ? `${reason} Blender scene state is uncertain; the editor remains open until explicitly closed.`
+      : `${reason} Existing Blender contents remain available for inspection.`;
+    appendDiagnostic(`[Blender UI reset error] ${reason}`);
+  } finally {
+    updateGuiActions();
+  }
+}
+
+function closeBlenderEditor() {
+  if (!blenderGui) return;
+  if (!window.confirm("Close the Blender editor? Unsaved Blender edits will be lost. This cannot be undone.")) return;
+  if (activeRun) cancelRun();
+  blenderGui.dispose();
+  blenderGui = null;
+  guiAvailable = typeof createBlenderGui === "function";
+  guiLeaseToken = null;
+  guiScenePresent = false;
+  guiSummary = null;
+  guiSnapshotFresh = false;
+  guiFatal = false;
+  guiDocumentInvalidated = false;
+  previewBadge.textContent = guiSnapshotPresent ? "GLB snapshot · stale after editor closed" : "Blender editor closed";
+  runtimeNote.textContent = "Blender editor closed. Its unsaved edits are gone; the GLB snapshot remains available if one exists.";
+  appendDiagnostic("[Blender UI] Editor closed after explicit confirmation.");
+  updateGuiActions();
+}
+
+async function toggleBlenderFullscreen() {
+  if (!blenderGui?.ready || !guiFrameVisible || activeRun || blenderGui.busy) return;
+  setPreviewMode("blender");
+  try {
+    if (document.fullscreenElement === guiHost) {
+      await document.exitFullscreen();
+    } else if (typeof guiHost.requestFullscreen === "function") {
+      await guiHost.requestFullscreen();
+    } else {
+      throw new Error("Fullscreen is unavailable in this browser.");
+    }
+  } catch (error) {
+    runtimeNote.textContent = errorText(error, "Could not change Blender fullscreen mode.");
+  } finally {
+    updateGuiActions();
+  }
+}
+
 function clearScene(message = "Your Blender-created mesh will appear here.") {
   preview.clear();
+  glbSummary = null;
+  glbIdentity = null;
   currentPreview = false;
   hasRunResult = false;
   enablePreviewControls(false);
@@ -258,6 +689,23 @@ function onStatus(run, message) {
 
 async function runCurrentSource() {
   if (!ready || activeRun || !activeExample || editor.disabled) return;
+  if (previewMode === "blender" && guiDocumentInvalidated) {
+    setPhase("Blender document changed", "running");
+    runtimeNote.textContent = "Waiting for the Blender editor bridge to resume after document load before creating a new scene.";
+    return;
+  }
+  if (previewMode === "blender" && !guiAvailable) {
+    setPhase("Blender editor unavailable", "error");
+    runtimeNote.textContent = `${guiFailure || "The actual Blender editor is unavailable."} Choose GLB preview for the preserved headless Blender-to-GLB workflow.`;
+    appendDiagnostic(`[Blender UI unavailable] ${runtimeNote.textContent}`);
+    return;
+  }
+  if (previewMode === "blender" && guiLeaseToken) {
+    setPhase("Generated scene already exists", "ready");
+    runtimeNote.textContent = "The active Rust-created scene remains editable. Use ‘Clear generated objects’ explicitly before creating a replacement; user-created Blender objects are preserved.";
+    clearGeneratedButton.focus();
+    return;
+  }
   if (!sourceWithinLimit(editor.value)) {
     setPhase("Source too large", "error");
     runtimeNote.textContent = "Source exceeds the 256 KiB limit. Reduce it before running; your text remains in the editor.";
@@ -273,7 +721,8 @@ async function runCurrentSource() {
     guestStarted: false,
   };
   activeRun = run;
-  clearScene("Running new source. Previous preview cleared.");
+  updateGuiActions();
+  if (previewMode === "glb") clearScene("Running new source. Previous GLB preview cleared.");
   resetStages();
   diagnostics.textContent = "";
   runPanel.setAttribute("aria-busy", "true");
@@ -284,7 +733,7 @@ async function runCurrentSource() {
   editor.disabled = true;
   setPhase("Starting Rust compile", "running");
   setStage("compile", "running", "Starting compiler");
-  runtimeNote.textContent = "Starting the Rust compiler. Runtime assets load only for an explicit run.";
+    runtimeNote.textContent = "Starting the Rust compiler. Runtime assets load only for an explicit run.";
   const options = {
     signal: run.controller.signal,
     onStatus: (text) => onStatus(run, text),
@@ -340,20 +789,58 @@ async function runCurrentSource() {
     }
 
     if (run.controller.signal.aborted || activeRun !== run) return;
-    setPhase("Starting Blender", "running");
-    setStage("blender", "running", "Starting a fresh Blender runtime frame");
-    runtimeNote.textContent = "Rust compiled. Starting a fresh Blender runtime and loading its local assets…";
-    appendDiagnostic("[runtime] Starting a fresh Blender runtime and blr scene execution.");
-    const result = await runBlenderScene(parsedCommands.json, options);
+    setPhase(previewMode === "blender" ? "Starting Blender editor" : "Starting headless Blender", "running");
+    setStage("blender", "running", previewMode === "blender" ? "Creating scene in persistent Blender editor" : "Starting isolated headless Blender frame");
+    runtimeNote.textContent = previewMode === "blender"
+      ? "Rust compiled. Sending bounded scene commands to the persistent Blender editor…"
+      : "Rust compiled. Starting the preserved isolated headless Blender scene runtime…";
+    appendDiagnostic(previewMode === "blender"
+      ? "[runtime] Creating the Rust scene in the persistent Blender GUI."
+      : "[runtime] Starting isolated headless Blender scene execution.");
+    let result;
+    if (previewMode === "blender") {
+      const gui = await ensureBlenderGui({ signal: run.controller.signal });
+      result = await gui.createScene(parsedCommands.json, { signal: run.controller.signal });
+    } else {
+      result = await runBlenderScene(parsedCommands.json, options);
+    }
     if (activeRun !== run || run.controller.signal.aborted) return;
     if (!result || !result.scene) throw new Error("Blender runtime returned no scene geometry.");
     setStage("blender", "complete", "Blender returned scene geometry");
+    if (previewMode === "blender") {
+      if (typeof result.leaseToken !== "string" || !result.leaseToken || !result.identity) {
+        throw new Error("Blender GUI did not return its validated scene lease and runtime identity.");
+      }
+      const summary = summarizeScene(result.scene);
+      guiLeaseToken = result.leaseToken;
+      guiIdentity = result.identity;
+      guiScenePresent = true;
+      guiSummary = summary;
+      if (guiSnapshotPresent) guiSnapshotFresh = false;
+      viewportEmpty.hidden = true;
+      stats.objects.textContent = String(summary.objects);
+      stats.vertices.textContent = String(summary.vertices);
+      stats.triangles.textContent = String(summary.triangles);
+      stats.version.textContent = summarizeIdentity(guiIdentity);
+      hasRunResult = true;
+      currentPreview = false;
+      previewBadge.textContent = "Blender editor · scene ready";
+      setStage("preview", "complete", "Editable scene in the actual Blender workspace");
+      setPhase("Complete · editable Blender scene", "ready");
+      runtimeNote.textContent = `Scene is live in Blender 5.2 and remains editable. ${summary.objects} objects, ${summary.vertices} vertices, ${summary.triangles} triangles. Snapshot explicitly to update GLB.`;
+      appendDiagnostic(`[Blender UI] Editable scene ready · ${summary.objects} objects · ${summary.vertices} vertices · ${summary.triangles} triangles · Blender ${summarizeIdentity(result.identity)}.`);
+      updateGuiActions();
+      setRunButton("Run in Blender");
+      return;
+    }
     appendDiagnostic("[runtime] Blender scene received. Preparing browser mesh preview.");
     setPhase("Preparing mesh preview", "running");
     setStage("preview", "running", "Building interactive GLB preview");
     if (!Array.isArray(result.scene.objects) || result.scene.objects.length === 0) {
       clearScene("Blender completed successfully and returned an empty scene. There is no mesh to preview.");
       hasRunResult = true;
+      glbSummary = { objects: 0, vertices: 0, triangles: 0 };
+      glbIdentity = result.identity;
       stats.objects.textContent = "0";
       stats.vertices.textContent = "0";
       stats.triangles.textContent = "0";
@@ -379,12 +866,15 @@ async function runCurrentSource() {
   } catch (error) {
     if (activeRun !== run || run.controller.signal.aborted) return;
     const reason = errorText(error, "The run failed for an unknown reason.");
+    const guiOperationFailed = previewMode === "blender" && stages.blender.dataset.state === "running";
     if (stages.blender.dataset.state === "running") setStage("blender", "error", "Blender run failed");
     else if (stages.compile.dataset.state === "running") setStage("compile", "error", "Rust compile failed");
     else if (stages.preview.dataset.state === "running") setStage("preview", "error", "Mesh preview failed");
-    clearScene(`No preview: ${reason}`);
+    if (previewMode === "glb") clearScene(`No preview: ${reason}`);
     setPhase("Run failed", "error");
-    runtimeNote.textContent = reason;
+    runtimeNote.textContent = guiOperationFailed
+      ? `${reason} The Blender workspace remains open. Choose GLB preview to use the preserved headless path.`
+      : reason;
     appendDiagnostic(`[error] ${reason}`);
     setRunButton("Retry run");
   } finally {
@@ -395,7 +885,8 @@ async function runCurrentSource() {
       select.disabled = false;
       resetButton.disabled = false;
       runPanel.setAttribute("aria-busy", "false");
-      setRunButton(phase.dataset.state === "error" ? "Retry run" : "Run again");
+      setRunButton(phase.dataset.state === "error" ? "Retry run" : previewMode === "blender" ? "Run in Blender" : "Run Rust + Blender");
+      updateGuiActions();
     }
   }
 }
@@ -403,21 +894,25 @@ async function runCurrentSource() {
 function cancelRun() {
   const run = activeRun;
   if (!run) return;
+  if (guiPendingCreateRequestId !== null) guiCanceledCreateRequestId = guiPendingCreateRequestId;
   activeRun = null;
   run.controller.abort();
-  clearScene("Run canceled. You can edit the source and try again.");
+  if (previewMode === "glb") clearScene("Run canceled. You can edit the source and try again.");
   setPhase("Canceled", "idle");
   setStage("compile", "idle");
   setStage("blender", "idle");
   setStage("preview", "idle");
   appendDiagnostic("[cancel] Run canceled. Any late output from this run is ignored.");
-  runtimeNote.textContent = "Run canceled. The runtime worker was asked to stop; retry is available.";
+  runtimeNote.textContent = previewMode === "blender"
+    ? "Run canceled. Existing Blender edits remain in the open workspace; retry is available."
+    : "Run canceled. The headless runtime worker was asked to stop; retry is available.";
   runPanel.setAttribute("aria-busy", "false");
   cancelButton.hidden = true;
   editor.disabled = false;
   select.disabled = false;
   resetButton.disabled = false;
-  setRunButton("Run again");
+  setRunButton(previewMode === "blender" ? "Run in Blender" : "Run Rust + Blender");
+  updateGuiActions();
 }
 
 async function loadExamples() {
@@ -493,7 +988,7 @@ function checkIsolation() {
 
 async function prepare() {
   try {
-    runtimeNote.textContent = "Loading local compiler, Blender bridge, viewer modules, examples, and browser isolation…";
+    runtimeNote.textContent = "Loading the Rust compiler, Blender scene helpers, and browser isolation…";
     const [compilerModule, blenderModule, viewerModule] = await Promise.all([
       import("./compiler.js"),
       import("./blender-runner.js"),
@@ -505,16 +1000,33 @@ async function prepare() {
     compileRust = compilerModule.compileRust;
     runBlenderScene = blenderModule.runBlenderScene;
     createScenePreview = viewerModule.createScenePreview;
-    preview = createScenePreview($("#preview-host"));
+    const previewHost = $("#preview-host");
+    if (glbHost.parentNode !== previewHost) previewHost.append(glbHost);
+    preview = createScenePreview(glbHost);
+    try {
+      const guiModule = await import("./gui-transport.js");
+      if (typeof guiModule.createBlenderGui !== "function") throw new Error("GUI transport is missing createBlenderGui.");
+      createBlenderGui = guiModule.createBlenderGui;
+      guiAvailable = true;
+      guiFailure = "";
+    } catch (error) {
+      guiAvailable = false;
+      guiFailure = errorText(error, "The Blender GUI transport could not be loaded.");
+      previewMode = "glb";
+    }
     const isolation = checkIsolation();
     await Promise.all([isolation, loadExamples()]);
     if (!window.crossOriginIsolated || typeof SharedArrayBuffer === "undefined") {
       throw new Error("This browser did not enable cross-origin isolation required by the local compiler and Blender runtime.");
     }
     ready = true;
+    updateGuiActions();
     setPhase("Ready", "ready");
-    runtimeNote.textContent = "Ready. Rust and Blender runtime assets download only after you press Run.";
-    setRunButton("Run Rust + Blender");
+    runtimeNote.textContent = guiAvailable
+      ? "Ready. Choose Blender editor or GLB preview. Runtime assets load only when you start Blender or run Rust."
+      : `Blender editor unavailable: ${guiFailure} Choose GLB preview for the preserved headless workflow.`;
+    if (!guiAvailable) setPreviewMode("glb");
+    setRunButton(previewMode === "blender" ? "Run in Blender" : "Run Rust + Blender");
   } catch (error) {
     ready = false;
     select.disabled = examples.length === 0;
@@ -585,6 +1097,14 @@ editor.addEventListener("paste", (event) => {
 select.addEventListener("change", () => selectExample(select.value));
 runButton.addEventListener("click", () => { void runCurrentSource(); });
 cancelButton.addEventListener("click", cancelRun);
+$("#mode-blender").addEventListener("click", () => setPreviewMode("blender"));
+$("#mode-glb").addEventListener("click", () => setPreviewMode("glb"));
+startBlenderButton.addEventListener("click", () => { void startBlender(); });
+snapshotGlbButton.addEventListener("click", () => { void snapshotBlenderScene(); });
+clearGeneratedButton.addEventListener("click", () => { void clearGeneratedObjects(); });
+closeBlenderButton.addEventListener("click", closeBlenderEditor);
+fullscreenBlenderButton.addEventListener("click", () => { void toggleBlenderFullscreen(); });
+document.addEventListener?.("fullscreenchange", updateGuiActions);
 resetButton.addEventListener("click", () => {
   if (!activeExample || activeRun) return;
   try { localStorage.removeItem(draftKey(activeExample.id)); } catch {}
