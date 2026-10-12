@@ -1,0 +1,397 @@
+{
+  "camera_lens_mm": 50,
+  "camera_sensor_mm": [
+    36,
+    24
+  ],
+  "camera_to_world": [
+    [
+      0.8221921920776367,
+      -0.25697898864746094,
+      0.5078994035720825,
+      3.5999999046325684
+    ],
+    [
+      0.5692099928855896,
+      0.3711918890476227,
+      -0.7336324453353882,
+      -5.199999809265137
+    ],
+    [
+      -2.0223779984007706e-8,
+      0.8922882676124573,
+      0.45146608352661133,
+      4.199999809265137
+    ],
+    [
+      0,
+      0,
+      0,
+      1
+    ]
+  ],
+  "color": {
+    "display": "sRGB",
+    "exposure": 0,
+    "gamma": 1,
+    "look": "None",
+    "view_transform": "Standard"
+  },
+  "coordinates": {
+    "camera": "local -Z forward, +Y up; row-major camera-to-world matrix",
+    "gltf": "right-handed Y-up; meters",
+    "scene": "right-handed Z-up; meters"
+  },
+  "files": {
+    "asset.blend": {
+      "bytes": 91424,
+      "media_type": "application/x-blender",
+      "sha256": "97a81d31932fd2815a101f1ae7f1524d495696a791659cf54e38e3271c9d81d4"
+    },
+    "asset.glb": {
+      "bytes": 3624,
+      "media_type": "model/gltf-binary",
+      "sha256": "23948edebf5064c751855264766d149967128cf74a39d2eddf8c194c64718fee"
+    },
+    "checker.png": {
+      "bytes": 627,
+      "media_type": "image/png",
+      "sha256": "dc0da9fb2693aefb22d6566bd214870c7bb37b63584de0c99d9039288c88ff44",
+      "size": [
+        64,
+        64
+      ]
+    },
+    "preview.png": {
+      "bytes": 42215,
+      "media_type": "image/png",
+      "sha256": "32c13b3257b81bde663afc0cc7eae40969d1db2146387cf5460ed9a6e16e6350",
+      "size": [
+        256,
+        256
+      ]
+    }
+  },
+  "geometry": {
+    "triangles": 28,
+    "vertices": 16
+  },
+  "glb_conversion": {
+    "coordinate_policy": "right-handed glTF Y-up; Blender (x, y, z) maps to (x, z, -y); export ignores scene scale_length",
+    "effective_options": [
+      [
+        "export_import_convert_lighting_mode",
+        "SPEC"
+      ],
+      [
+        "gltf_export_id",
+        ""
+      ],
+      [
+        "export_format",
+        "GLB"
+      ],
+      [
+        "ui_tab",
+        "GENERAL"
+      ],
+      [
+        "export_copyright",
+        ""
+      ],
+      [
+        "export_image_format",
+        "AUTO"
+      ],
+      [
+        "export_texture_dir",
+        ""
+      ],
+      [
+        "export_jpeg_quality",
+        "75"
+      ],
+      [
+        "export_keep_originals",
+        "false"
+      ],
+      [
+        "export_texcoords",
+        "true"
+      ],
+      [
+        "export_normals",
+        "true"
+      ],
+      [
+        "export_draco_mesh_compression_enable",
+        "false"
+      ],
+      [
+        "export_draco_mesh_compression_level",
+        "6"
+      ],
+      [
+        "export_draco_position_quantization",
+        "14"
+      ],
+      [
+        "export_draco_normal_quantization",
+        "10"
+      ],
+      [
+        "export_draco_texcoord_quantization",
+        "12"
+      ],
+      [
+        "export_draco_color_quantization",
+        "10"
+      ],
+      [
+        "export_draco_generic_quantization",
+        "12"
+      ],
+      [
+        "export_tangents",
+        "false"
+      ],
+      [
+        "export_materials",
+        "EXPORT"
+      ],
+      [
+        "export_original_specular",
+        "false"
+      ],
+      [
+        "export_vertex_color",
+        "MATERIAL"
+      ],
+      [
+        "export_attributes",
+        "false"
+      ],
+      [
+        "use_mesh_edges",
+        "false"
+      ],
+      [
+        "use_mesh_vertices",
+        "false"
+      ],
+      [
+        "export_cameras",
+        "false"
+      ],
+      [
+        "use_selection",
+        "true"
+      ],
+      [
+        "use_visible",
+        "false"
+      ],
+      [
+        "use_renderable",
+        "false"
+      ],
+      [
+        "use_active_collection_with_nested",
+        "false"
+      ],
+      [
+        "use_active_collection",
+        "false"
+      ],
+      [
+        "use_active_scene",
+        "false"
+      ],
+      [
+        "export_extras",
+        "false"
+      ],
+      [
+        "export_yup",
+        "true"
+      ],
+      [
+        "export_apply",
+        "false"
+      ],
+      [
+        "export_animations",
+        "false"
+      ],
+      [
+        "export_frame_range",
+        "false"
+      ],
+      [
+        "export_frame_step",
+        "1"
+      ],
+      [
+        "export_force_sampling",
+        "true"
+      ],
+      [
+        "export_animation_mode",
+        "ACTIONS"
+      ],
+      [
+        "export_nla_strips_merged_animation_name",
+        "Animation"
+      ],
+      [
+        "export_def_bones",
+        "false"
+      ],
+      [
+        "export_hierarchy_flatten_bones",
+        "false"
+      ],
+      [
+        "export_optimize_animation_size",
+        "true"
+      ],
+      [
+        "export_optimize_animation_keep_anim_armature",
+        "true"
+      ],
+      [
+        "export_optimize_animation_keep_anim_object",
+        "false"
+      ],
+      [
+        "export_negative_frame",
+        "SLIDE"
+      ],
+      [
+        "export_anim_slide_to_zero",
+        "false"
+      ],
+      [
+        "export_bake_animation",
+        "false"
+      ],
+      [
+        "export_anim_single_armature",
+        "true"
+      ],
+      [
+        "export_reset_pose_bones",
+        "true"
+      ],
+      [
+        "export_current_frame",
+        "false"
+      ],
+      [
+        "export_rest_position_armature",
+        "true"
+      ],
+      [
+        "export_anim_scene_split_object",
+        "true"
+      ],
+      [
+        "export_skins",
+        "true"
+      ],
+      [
+        "export_all_influences",
+        "false"
+      ],
+      [
+        "export_morph",
+        "true"
+      ],
+      [
+        "export_morph_normal",
+        "true"
+      ],
+      [
+        "export_morph_tangent",
+        "false"
+      ],
+      [
+        "export_morph_animation",
+        "true"
+      ],
+      [
+        "export_morph_reset_sk_data",
+        "true"
+      ],
+      [
+        "export_lights",
+        "false"
+      ],
+      [
+        "export_nla_strips",
+        "true"
+      ],
+      [
+        "will_save_settings",
+        "false"
+      ]
+    ],
+    "glb_version": 2,
+    "output_bytes": 3624,
+    "output_path": "asset.glb",
+    "scene_unit_scale": 1,
+    "selected_candidates": [
+      {
+        "data_name": "Mesh",
+        "matrix_world": [
+          [
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ]
+        ],
+        "name": "ProceduralAsset",
+        "type": "MESH"
+      }
+    ]
+  },
+  "parameters": {
+    "height": 2,
+    "radius": 1,
+    "resolution": 256,
+    "segments": 8
+  },
+  "recipe": "procedural_asset",
+  "runtime": {
+    "blender": "5.2.0",
+    "blender_build_hash": "fbe6228777e7",
+    "device": "CPU",
+    "engine": "CYCLES",
+    "frame": 1,
+    "python": "3.13.15 (main, Sep 19 2026, 01:05:56) [GCC 12.2.0]",
+    "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)",
+    "samples": 16,
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "schema_version": 1,
+  "seed": 7
+}

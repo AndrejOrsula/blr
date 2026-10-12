@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101822">
+  <meta name="description" content="License notices for the Blender and blr browser runtime and bundled components.">
+  <title>Runtime license notices · BLR</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.65 system-ui, sans-serif; color: #18232d; background: #f5f7f8; }
+    body { max-width: 54rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    a { color: #075b74; text-underline-offset: .18em; }
+    h1, h2 { line-height: 1.2; }
+    h1 { margin-bottom: .4rem; }
+    section { margin-top: 2rem; padding: 1.25rem; background: white; border: 1px solid #d6e0e4; border-radius: .7rem; }
+    .status { padding: .9rem 1rem; background: #fff4dc; border-left: .25rem solid #b87900; }
+    .notice { color: #46545e; font-size: .94rem; }
+    ul { padding-left: 1.4rem; }
+  </style>
+</head>
+<body>
+  <p><a href="./">← BLR browser demo</a></p>
+  <main>
+    <h1>Runtime license notices</h1>
+    <p>This page identifies license materials for the browser demo’s Blender 5.2.0 and CPython 3.13.13 runtime, the statically linked Rust component, and the browser viewer.</p>
+
+    <p class="status"><strong>Source status:</strong> Source publication is pending review. No Rust source code is included here, and no source availability or GPL compliance claim is made.</p>
+
+    <section aria-labelledby="blr-title">
+      <h2 id="blr-title">blr</h2>
+      <p>The project’s first-party license texts are available as <a href="./LICENSE-APACHE">Apache-2.0</a> and <a href="./LICENSE-MIT">MIT</a>. The browser runtime contains a statically linked Rust component built from the project and its Rust dependency graph.</p>
+      <p>The detailed index records the locked WebAssembly-target package names, versions, declared license expressions, and the license or notice files shipped with each exact crate version when present. It also includes Rust standard-library notices and the Emscripten license. Missing package files and the build wrapper’s undeclared license are identified in the index.</p>
+      <ul>
+        <li><a href="./runtime-licenses/rust/index.html">Rust package, standard-library, and Emscripten notices</a></li>
+      </ul>
+      <p class="notice">The index describes the build dependency graph. It does not map object code in the final binary or certify compliance for the combined runtime.</p>
+    </section>
+
+    <section aria-labelledby="blender-title">
+      <h2 id="blender-title">Blender 5.2.0</h2>
+      <p>The browser runtime uses Blender 5.2.0. Blender’s upstream license disclosure identifies Blender’s license and provides third-party license notices and license texts:</p>
+      <ul>
+        <li><a href="./runtime-licenses/blender-5.2-third-party-licenses.md">Blender 5.2 upstream license disclosure and third-party license texts</a></li>
+      </ul>
+      <p class="notice">The linked document is Blender’s upstream license inventory for its release source. It may cover components beyond those used by this headless browser build.</p>
+    </section>
+
+    <section aria-labelledby="python-title">
+      <h2 id="python-title">CPython 3.13.13</h2>
+      <p>The runtime embeds CPython 3.13.13 with system Expat. CPython’s license and included third-party notices are reproduced from its runtime asset:</p>
+      <ul>
+        <li><a href="./runtime-licenses/cpython-3.13.13-LICENSE.txt">CPython 3.13.13 LICENSE.txt</a></li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="viewer-title">
+      <h2 id="viewer-title">Browser viewer</h2>
+      <p>The bundled model viewer and its dependencies have separate notices:</p>
+      <ul>
+        <li><a href="./vendor/NOTICE.html">Viewer third-party notices and license files</a></li>
+      </ul>
+    </section>
+
+    <p class="notice">These notices identify materials found in the build inputs and bundled assets. They are provided for information and are not a legal review or certification that distribution requirements have been met.</p>
+  </main>
+</body>
+</html>

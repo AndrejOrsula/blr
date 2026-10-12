@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; worker-src 'self' blob:; style-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Blender runtime</title>
+  </head>
+  <body>
+    <p id="runtime-status" role="status">Preparing Blender runtime…</p>
+    <script src="isolation.js" defer></script>
+    <script src="runtime-frame.js" defer></script>
+  </body>
+</html>
