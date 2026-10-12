@@ -1,8 +1,15 @@
 (() => {
   'use strict';
 
-  const CHANNEL = 'blr-demo';
+  const LEGACY_CHANNEL = 'blr-demo';
   const MAX_CAPTURED_OUTPUT = 64 * 1024;
+  const MAX_SCENE_OUTPUT = 32 * 1024 * 1024;
+  const MAX_COMMAND_BYTES = 256 * 1024;
+  const MAX_OBJECTS = 64;
+  const MAX_VERTICES = 100000;
+  const MAX_TRIANGLES = 200000;
+  const SCENE_CHANNEL = 'blr-scene-v1';
+  const EXPECTED_BUILD_HASH = 'fbe6228777e7';
   const MAX_MANIFEST_BYTES = 16 * 1024;
   const MAX_LOADER_BYTES = 2 * 1024 * 1024;
   const MAX_COMPRESSED_WASM_BYTES = 99 * 1024 * 1024;
@@ -20,9 +27,11 @@
   let capturedOutput = 0;
   let resultRecord = null;
   let failed = false;
+  let inputReceived = false;
+  let legacySize = null;
 
   function post(type, values = {}) {
-    window.parent.postMessage({ channel: CHANNEL, runId, type, ...values }, location.origin);
+    window.parent.postMessage({ channel: runChannel, runId, type, ...values }, location.origin);
   }
 
   function setStatus(state) {
@@ -31,6 +40,7 @@
   }
 
   const runId = params.get('run') || '';
+  const runChannel = params.has('size') ? LEGACY_CHANNEL : SCENE_CHANNEL;
   function fail(message) {
     if (failed) return;
     failed = true;
@@ -126,6 +136,9 @@
       'spec = getattr(probe, "__spec__", None)',
       'origin = getattr(spec, "origin", None)',
       'if origin != "built-in": raise AssertionError("Rust module is not built-in: %r" % (origin,))',
+      'raw_build_hash = bpy.app.build_hash',
+      'build_hash = raw_build_hash.decode("ascii", "strict") if isinstance(raw_build_hash, bytes) else raw_build_hash',
+      `if not isinstance(build_hash, str) or not build_hash.isascii() or build_hash != "${EXPECTED_BUILD_HASH}": raise AssertionError("unexpected Blender build hash: %r" % (build_hash,))`,
       'identity = {"module": probe.__name__, "origin": origin, "has_file": False, "function_module": probe.run_cube_probe.__module__}',
       'def inventory():',
       '    data = bpy.data',
@@ -136,71 +149,133 @@
       'after = inventory()',
       'if result != (requested, 8, 12, 12): raise AssertionError("Rust cube result mismatch: %r" % (result,))',
       'if before != after: raise AssertionError("Rust cube call changed object/mesh session_uid inventories")',
-      'record = {"case": "browser-cube", "blender_version": list(version), "python_version": sys.version, "blender_build_hash": str(bpy.app.build_hash), "rust_module": identity, "requested_size": requested, "result": list(result), "inventory_unchanged": True}',
+      'record = {"case": "browser-cube", "blender_version": list(version), "python_version": sys.version, "blender_build_hash": build_hash, "rust_module": identity, "requested_size": requested, "result": list(result), "inventory_unchanged": True}',
       'print("BLR_BROWSER_PROBE_RESULT " + json.dumps(record, separators=(",", ":")))',
     ].join('\n');
     return `exec(${JSON.stringify(code)})`;
   }
 
-  function parseRuntimeOutput(line) {
-    capturedOutput += line.length;
-    if (capturedOutput > MAX_CAPTURED_OUTPUT) {
-      fail('Blender output exceeded the 64 KiB limit');
-      return;
-    }
-    const prefix = 'BLR_BROWSER_PROBE_RESULT ';
-    if (!line.startsWith(prefix)) return;
-    if (resultRecord) {
-      fail('Blender emitted more than one result record');
-      return;
-    }
-    try {
-      const record = JSON.parse(line.slice(prefix.length));
-      const expectedSize = Number(params.get('size'));
-      const rust = record.rust_module;
-      if (record.case !== 'browser-cube'
-        || JSON.stringify(record.blender_version) !== '[5,2,0]'
-        || typeof record.python_version !== 'string' || !/^3\.13\./.test(record.python_version)
-        || typeof record.blender_build_hash !== 'string' || !record.blender_build_hash
-        || !rust || rust.module !== '_blr_browser_probe' || rust.origin !== 'built-in'
-        || rust.has_file !== false || rust.function_module !== '_blr_browser_probe'
-        || record.requested_size !== expectedSize
-        || !Array.isArray(record.result) || record.result.length !== 4
-        || record.result[0] !== expectedSize || record.result[1] !== 8
-        || record.result[2] !== 12 || record.result[3] !== 12
-        || record.inventory_unchanged !== true) {
-        throw new Error('Blender result did not satisfy the built-in cube contract');
-      }
-      resultRecord = {
-        blender_version: record.blender_version,
-        python_version: record.python_version,
-        blender_build_hash: record.blender_build_hash,
-        rust_module: rust,
-        requested_size: expectedSize,
-        result: record.result,
-        inventory_unchanged: true,
-      };
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'invalid Blender result record');
-    }
+  function makeScenePythonExpression(commandJson) {
+    const code = [
+      'import bpy, json, sys',
+      'probe = __import__("_blr_browser_probe")',
+      'version = tuple(bpy.app.version)',
+      'if version != (5, 2, 0): raise RuntimeError("expected Blender 5.2.0; observed %r" % (version,))',
+      'if hasattr(probe, "__file__"): raise AssertionError("Rust module unexpectedly has __file__")',
+      'spec = getattr(probe, "__spec__", None)',
+      'origin = getattr(spec, "origin", None)',
+      'if origin != "built-in": raise AssertionError("Rust module is not built-in: %r" % (origin,))',
+      'raw_build_hash = bpy.app.build_hash',
+      'build_hash = raw_build_hash.decode("ascii", "strict") if isinstance(raw_build_hash, bytes) else raw_build_hash',
+      `if not isinstance(build_hash, str) or not build_hash.isascii() or build_hash != "${EXPECTED_BUILD_HASH}": raise AssertionError("unexpected Blender build hash: %r" % (build_hash,))`,
+      'def inventory():',
+      '    data = bpy.data',
+      '    return tuple(sorted(item.session_uid for item in collection) for collection in (data.objects, data.meshes, data.materials))',
+      'before = inventory()',
+      `command_json = ${JSON.stringify(commandJson)}`,
+      'scene_json = probe.run_scene(command_json)',
+      'if not isinstance(scene_json, str): raise AssertionError("Rust scene callback did not return JSON text")',
+      'after = inventory()',
+      'if before != after: raise AssertionError("Rust scene call changed object/mesh/material session_uid inventories")',
+      'scene = json.loads(scene_json)',
+      'identity = {"module": probe.__name__, "origin": origin, "has_file": False, "function_module": probe.run_scene.__module__, "blender_version": list(version), "python_version": sys.version, "blender_build_hash": build_hash, "inventory_unchanged": True}',
+      'record = {"scene": scene, "identity": identity}',
+      'print("BLR_BROWSER_SCENE_RESULT " + json.dumps(record, separators=(",", ":"), ensure_ascii=False))',
+    ].join('\n');
+    return `exec(${JSON.stringify(code)})`;
   }
 
-  async function start() {
-    if (params.getAll('run').length !== 1 || !/^[A-Za-z0-9._:-]{1,128}$/.test(runId)) {
-      throw new Error('missing or invalid run identifier');
+  function validateScene(scene) {
+    if (!scene || typeof scene !== 'object' || Array.isArray(scene)
+      || scene.schema !== 'blr-scene-v1' || !Array.isArray(scene.objects)
+      || scene.objects.length > MAX_OBJECTS) throw new Error('Blender returned an unsupported scene schema');
+    const names = new Set();
+    let vertices = 0;
+    let triangles = 0;
+    for (const object of scene.objects) {
+      if (!object || typeof object !== 'object' || Array.isArray(object)
+        || typeof object.name !== 'string' || !object.name || new TextEncoder().encode(object.name).byteLength > 256
+        || names.has(object.name) || !Array.isArray(object.positions) || !Array.isArray(object.triangles)
+        || !Array.isArray(object.color) || object.color.length !== 4
+        || Object.keys(object).some(key => !['name', 'positions', 'triangles', 'color'].includes(key))) throw new Error('Blender returned malformed scene geometry');
+      names.add(object.name);
+      vertices += object.positions.length;
+      triangles += object.triangles.length;
+      if (vertices > MAX_VERTICES || triangles > MAX_TRIANGLES) throw new Error('Blender geometry exceeds the vertex or triangle limit');
+      if (!object.color.every(value => Number.isFinite(value) && value >= 0 && value <= 1)) throw new Error('Blender returned invalid linear RGBA color');
+      for (const position of object.positions) {
+        if (!Array.isArray(position) || position.length !== 3
+          || !position.every(value => Number.isFinite(value) && Math.abs(value) <= 1000000)) throw new Error('Blender returned invalid world-space positions');
+      }
+      for (const triangle of object.triangles) {
+        if (!Array.isArray(triangle) || triangle.length !== 3
+          || !triangle.every(index => Number.isSafeInteger(index) && index >= 0 && index < object.positions.length)) throw new Error('Blender returned invalid triangle indices');
+      }
     }
-    if (params.getAll('size').length !== 1 || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(params.get('size') || '')) {
-      throw new Error('size must be a number from 0.1 through 4');
-    }
-    const size = Number(params.get('size'));
-    if (!Number.isFinite(size) || size < 0.1 || size > 4) throw new Error('size must be a number from 0.1 through 4');
-    if ([...params.keys()].some(key => key !== 'run' && key !== 'size')) throw new Error('unsupported runtime URL parameter');
-    if (!window.blrIsolationReady || typeof window.blrIsolationReady.then !== 'function') {
-      throw new Error('cross-origin isolation setup is unavailable');
-    }
-    await window.blrIsolationReady;
-    if (!('DecompressionStream' in window) || !crypto.subtle) throw new Error('this browser cannot verify the runtime files');
+    if (new TextEncoder().encode(JSON.stringify(scene)).byteLength > MAX_SCENE_OUTPUT) throw new Error('Blender geometry exceeds the 32 MiB output limit');
+    return scene;
+  }
 
+  function parseRuntimeOutput(line) {
+    const scenePrefix = 'BLR_BROWSER_SCENE_RESULT ';
+    const cubePrefix = 'BLR_BROWSER_PROBE_RESULT ';
+    if (line.startsWith(scenePrefix)) {
+      if (line.length > MAX_SCENE_OUTPUT + MAX_CAPTURED_OUTPUT) return fail('Blender scene result exceeded the output limit');
+      if (resultRecord) return fail('Blender emitted more than one result record');
+      try {
+        const record = JSON.parse(line.slice(scenePrefix.length));
+        const rust = record.identity;
+        const scene = validateScene(record.scene);
+        if (!rust || rust.module !== '_blr_browser_probe' || rust.origin !== 'built-in'
+          || rust.has_file !== false || rust.function_module !== '_blr_browser_probe'
+          || JSON.stringify(rust.blender_version) !== '[5,2,0]'
+          || typeof rust.python_version !== 'string' || !/^3\.13\./.test(rust.python_version)
+          || rust.blender_build_hash !== EXPECTED_BUILD_HASH
+          || rust.inventory_unchanged !== true) throw new Error('Blender identity or inventory preservation was not proven');
+        resultRecord = { scene, identity: rust };
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : 'invalid Blender scene result');
+      }
+      return;
+    }
+    if (line.startsWith(cubePrefix)) {
+      capturedOutput += line.length;
+      if (capturedOutput > MAX_CAPTURED_OUTPUT) return fail('Blender output exceeded the 64 KiB limit');
+      if (resultRecord) return fail('Blender emitted more than one result record');
+      try {
+        const record = JSON.parse(line.slice(cubePrefix.length));
+        const expectedSize = Number(params.get('size'));
+        const rust = record.rust_module;
+        if (record.case !== 'browser-cube' || JSON.stringify(record.blender_version) !== '[5,2,0]'
+          || typeof record.python_version !== 'string' || !/^3\.13\./.test(record.python_version)
+          || record.blender_build_hash !== EXPECTED_BUILD_HASH
+          || !rust || rust.module !== '_blr_browser_probe' || rust.origin !== 'built-in'
+          || rust.has_file !== false || rust.function_module !== '_blr_browser_probe'
+          || record.requested_size !== expectedSize || !Array.isArray(record.result) || record.result.length !== 4
+          || record.result[0] !== expectedSize || record.result[1] !== 8 || record.result[2] !== 12
+          || record.result[3] !== 12 || record.inventory_unchanged !== true) throw new Error('Blender result did not satisfy the built-in cube contract');
+        resultRecord = {
+          blender_version: record.blender_version,
+          python_version: record.python_version,
+          blender_build_hash: record.blender_build_hash,
+          rust_module: rust,
+          requested_size: expectedSize,
+          result: record.result,
+          inventory_unchanged: true,
+        };
+      } catch (error) {
+        fail(error instanceof Error ? error.message : 'invalid Blender result record');
+      }
+      return;
+    }
+    capturedOutput += String(line).length;
+    if (capturedOutput > MAX_CAPTURED_OUTPUT) return fail('Blender output exceeded the 64 KiB limit');
+    post('output', { stream: 'stdout', text: String(line).slice(0, 4096) });
+  }
+
+  async function startRuntime(mode) {
+    if (failed) return;
+    if (!('DecompressionStream' in window) || !crypto.subtle) throw new Error('this browser cannot verify the runtime files');
     setStatus('loading');
     const manifestResponse = await fetch(new URL('runtime/manifest.json', location.href), {
       credentials: 'same-origin', cache: 'no-store',
@@ -210,7 +285,6 @@
     const manifest = JSON.parse(new TextDecoder().decode(manifestBytes));
     const files = validateManifest(manifest);
     setStatus('verifying runtime files');
-
     const runtimeRoot = new URL('runtime/', location.href);
     const loaderUrl = new URL('blender.js', runtimeRoot);
     const compressedUrl = new URL('blender.wasm.gz', runtimeRoot);
@@ -218,10 +292,7 @@
     compressedUrl.searchParams.set('v', files['blender.wasm.gz'].sha256);
     if (loaderUrl.origin !== location.origin || compressedUrl.origin !== location.origin
       || !loaderUrl.pathname.startsWith(runtimeRoot.pathname)
-      || !compressedUrl.pathname.startsWith(runtimeRoot.pathname)) {
-      throw new Error('runtime path escaped its same-origin directory');
-    }
-
+      || !compressedUrl.pathname.startsWith(runtimeRoot.pathname)) throw new Error('runtime path escaped its same-origin directory');
     const [loaderBytes, compressedBytes] = await Promise.all([
       fetchVerified(loaderUrl, files['blender.js'], 'Blender loader'),
       fetchVerified(compressedUrl, files['blender.wasm.gz'], 'compressed Blender runtime'),
@@ -233,35 +304,32 @@
     );
     if (decompressed.byteLength !== files['blender.wasm'].size) throw new Error('decompressed Wasm size does not match the runtime manifest');
     if (await sha256(decompressed) !== files['blender.wasm'].sha256) throw new Error('decompressed Wasm SHA-256 does not match the runtime manifest');
-
     setStatus('starting Blender 5.2');
     window.Module = {
       wasmBinary: decompressed,
       arguments: [
         '--background', '--factory-startup', '--threads', '1',
-        '--python-exit-code', '1', '--python-expr', makePythonExpression(size),
+        '--python-exit-code', '1', '--python-expr', mode.kind === 'scene'
+          ? makeScenePythonExpression(mode.commandJson) : makePythonExpression(mode.size),
       ],
       preRun: [() => {
-        if (!window.Module.ENV || typeof window.Module.ENV !== 'object') {
-          throw new Error('Blender runtime did not export its environment interface');
-        }
+        if (!window.Module.ENV || typeof window.Module.ENV !== 'object') throw new Error('Blender runtime did not export its environment interface');
         Object.assign(window.Module.ENV, ALLOWED_ENV);
       }],
       print: parseRuntimeOutput,
       printErr: line => {
         capturedOutput += String(line).length;
-        if (capturedOutput > MAX_CAPTURED_OUTPUT) fail('Blender output exceeded the 64 KiB limit');
+        if (capturedOutput > MAX_CAPTURED_OUTPUT) return fail('Blender output exceeded the 64 KiB limit');
+        post('output', { stream: 'stderr', text: String(line).slice(0, 4096) });
       },
       onRuntimeInitialized: () => setStatus('running Blender 5.2'),
       onAbort: reason => fail(`Blender runtime aborted: ${String(reason).slice(0, 384)}`),
       onExit: status => {
         const code = Number(status);
         post('exit', { status: Number.isInteger(code) ? code : -1 });
-        if (code !== 0) {
-          fail(`Blender exited with status ${String(status)}`);
-        } else if (!resultRecord) {
-          fail('Blender exited successfully without a valid Rust result');
-        } else if (!failed) {
+        if (code !== 0) fail(`Blender exited with status ${String(status)}`);
+        else if (!resultRecord) fail('Blender exited successfully without a valid Rust result');
+        else if (!failed) {
           statusNode.textContent = 'Blender demo complete';
           post('result', resultRecord);
         }
@@ -269,9 +337,7 @@
       locateFile: (path, prefix) => {
         if (path !== 'blender.wasm') throw new Error(`unexpected Blender runtime file: ${path}`);
         const resolved = new URL(path, prefix || runtimeRoot.href);
-        if (resolved.origin !== location.origin || resolved.href !== new URL('blender.wasm', runtimeRoot).href) {
-          throw new Error('Blender runtime requested a file outside its runtime directory');
-        }
+        if (resolved.origin !== location.origin || resolved.href !== new URL('blender.wasm', runtimeRoot).href) throw new Error('Blender runtime requested a file outside its runtime directory');
         return resolved.href;
       },
     };
@@ -281,6 +347,70 @@
     script.crossOrigin = 'anonymous';
     script.onerror = () => fail('could not load Blender loader');
     document.head.append(script);
+  }
+
+  function receiveInput(event) {
+    if (event.source !== window.parent || event.origin !== location.origin) return;
+    const data = event.data;
+    if (!data || data.channel !== SCENE_CHANNEL || data.runId !== runId || data.type !== 'run') return;
+    if (inputReceived || legacySize !== null) return fail('runtime received duplicate scene input');
+    inputReceived = true;
+    try {
+      if (typeof data.commandText !== 'string') throw new Error('scene command text is missing');
+      if (new TextEncoder().encode(data.commandText).byteLength > MAX_COMMAND_BYTES) throw new Error('scene commands exceed the 256 KiB limit');
+      const commands = JSON.parse(data.commandText);
+      if (!commands || typeof commands !== 'object' || Array.isArray(commands)
+        || commands.schema !== 'blr-scene-commands-v1' || !Array.isArray(commands.objects)
+        || commands.objects.length > MAX_OBJECTS) throw new Error('unsupported scene command schema or object count');
+      if (Object.keys(commands).some(key => !['schema', 'objects'].includes(key))) throw new Error('unsupported scene command field');
+      const allowed = new Set(['kind', 'name', 'location', 'rotation', 'scale', 'color', 'size', 'radius', 'radius1', 'radius2', 'depth', 'segments', 'ring_count', 'major_segments', 'minor_segments', 'major_radius', 'minor_radius']);
+      const kinds = new Set(['cube', 'uv_sphere', 'cylinder', 'cone', 'torus', 'plane']);
+      const names = new Set();
+      for (const object of commands.objects) {
+        if (!object || typeof object !== 'object' || Array.isArray(object)
+          || Object.keys(object).some(key => !allowed.has(key))
+          || typeof object.name !== 'string' || !object.name || new TextEncoder().encode(object.name).byteLength > 128
+          || names.has(object.name) || !kinds.has(object.kind)) throw new Error('invalid primitive command');
+        names.add(object.name);
+        for (const field of ['location', 'rotation', 'scale']) {
+          const vector = object[field];
+          if (vector === undefined) continue;
+          if (!Array.isArray(vector) || vector.length !== 3
+            || !vector.every(value => Number.isFinite(value) && Math.abs(value) <= 1000)
+            || (field === 'scale' && vector.some(value => value === 0))) throw new Error(`${field} coordinates must be finite and within the 1000 bound`);
+        }
+        if (object.color !== undefined && (!Array.isArray(object.color) || object.color.length !== 4
+          || !object.color.every(value => Number.isFinite(value) && value >= 0 && value <= 1))) throw new Error('invalid RGBA color');
+        for (const field of ['size', 'radius', 'radius1', 'radius2', 'depth', 'major_radius', 'minor_radius']) {
+          if (object[field] !== undefined && (!Number.isFinite(object[field]) || object[field] < 0 || object[field] > 1000)) throw new Error(`invalid ${field} dimension`);
+        }
+        for (const field of ['segments', 'ring_count', 'major_segments', 'minor_segments']) {
+          if (object[field] !== undefined && (!Number.isSafeInteger(object[field]) || object[field] < 3 || object[field] > 128)) throw new Error(`invalid ${field} count`);
+        }
+        if (object.kind === 'torus' && (object.minor_radius ?? 0.25) >= (object.major_radius ?? 1)) throw new Error('torus minor radius must be smaller than major radius');
+      }
+      startRuntime({ kind: 'scene', commandJson: data.commandText }).catch(error => fail(error instanceof Error ? error.message : 'runtime startup failed'));
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'invalid scene commands');
+    }
+  }
+
+  async function start() {
+    if (params.getAll('run').length !== 1 || !/^[A-Za-z0-9._:-]{1,128}$/.test(runId)) throw new Error('missing or invalid run identifier');
+    if (params.getAll('size').length > 1) throw new Error('duplicate runtime size parameter');
+    if (params.has('size')) {
+      if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(params.get('size') || '')) throw new Error('size must be a number from 0.1 through 4');
+      legacySize = Number(params.get('size'));
+      if (!Number.isFinite(legacySize) || legacySize < 0.1 || legacySize > 4) throw new Error('size must be a number from 0.1 through 4');
+    }
+    if ([...params.keys()].some(key => key !== 'run' && key !== 'size')) throw new Error('unsupported runtime URL parameter');
+    if (!window.blrIsolationReady || typeof window.blrIsolationReady.then !== 'function') throw new Error('cross-origin isolation setup is unavailable');
+    await window.blrIsolationReady;
+    if (legacySize !== null) startRuntime({ kind: 'cube', size: legacySize }).catch(error => fail(error instanceof Error ? error.message : 'runtime startup failed'));
+    else {
+      window.addEventListener('message', receiveInput);
+      post('ready');
+    }
   }
 
   if (window.parent === window) {

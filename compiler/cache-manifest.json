@@ -1,0 +1,22 @@
+{
+  "schema": "blr-rust-compiler-assets-v1",
+  "compilerVersion": "rustc 1.83.0-dev",
+  "target": "wasm32-wasip1",
+  "assets": [
+    {
+      "file": "compiler/assets/rustc_opt.wasm.br",
+      "bytes": 19774341,
+      "sha256": "10f06919521c61f177b432ae7fd08cc3d4547efc3b13c2f547560fb53cf05ca6"
+    },
+    {
+      "file": "compiler/assets/wasm32-wasip1.tar.br",
+      "bytes": 18933366,
+      "sha256": "bf29ba33cbf6267c10a1c1838edfff76d19750287159adfa08ab308db922bfdb"
+    },
+    {
+      "file": "compiler/brotli-dec-wasm/pkg/brotli_dec_wasm_bg.wasm",
+      "bytes": 206243,
+      "sha256": "7cb4663fd0b11185b88177d0b3b3048136572faf49e81c4c78dccafe37bb68d7"
+    }
+  ]
+}
