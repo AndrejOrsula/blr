@@ -38,8 +38,8 @@
     },
     {
       "path": "compiler-inputs.js",
-      "size": 23244,
-      "sha256": "9308dd05a7ae53849e102d028299427ef2942c0944122a08b13a7d998f9e0894"
+      "size": 23823,
+      "sha256": "463c3ba37b7dfef5fc3e6cea59ff5473fb864cb96aa63a47bc51eca4bf9e8311"
     },
     {
       "path": "compiler-licenses/Apache-2.0.txt",

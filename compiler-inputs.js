@@ -43,11 +43,11 @@ function checkAbort(signal) {
   if (signal?.aborted) throw abortError();
 }
 
-async function fetchBytes(url, { signal, limit, label, onProgress, asset, totalBytes }) {
+async function fetchBytes(url, { signal, limit, label, onProgress, asset, totalBytes, cache = "force-cache" }) {
   const progress = { phase: "fetch", asset, totalBytes: null, source: "network-or-cache" };
   let response;
   try {
-    response = await fetch(url, { cache: "force-cache", credentials: "same-origin", signal });
+    response = await fetch(url, { cache, credentials: "same-origin", signal });
   } catch (error) {
     notifyProgress(onProgress, {
       ...progress,
@@ -374,17 +374,29 @@ export async function loadExampleInputs({ signal, onProgress } = {}) {
       checkAbort(loadSignal);
       return manifest;
     })();
-    const helperPromise = fetchBytes(new URL("./blr_demo.rs", import.meta.url), {
+    const manifest = await examplesPromise;
+    // Keep each helper version in a distinct browser HTTP-cache entry.
+    const helperUrl = new URL(`./blr_demo.rs?v=${encodeURIComponent(manifest.helperSha256)}`, import.meta.url);
+    const helperOptions = {
       signal: loadSignal, limit: MAX_HELPER_BYTES, label: "Rust scene helper",
       onProgress, asset: "blr-helper", totalBytes: null,
-    });
-    const [manifest, helper] = await Promise.all([examplesPromise, helperPromise]);
+    };
+    let helper = await fetchBytes(helperUrl, helperOptions);
     checkAbort(loadSignal);
     workStage(onProgress, "verify", "blr-helper", "start", helper.byteLength, null);
     let helperText;
     try {
-      if (await digest(helper) !== manifest.helperSha256) {
-        throw new Error("Rust scene helper does not match the examples manifest.");
+      let helperDigest = await digest(helper);
+      checkAbort(loadSignal);
+      if (helperDigest !== manifest.helperSha256) {
+        // Refresh this one pinned cache entry once; never accept bytes without the digest.
+        helper = await fetchBytes(helperUrl, { ...helperOptions, cache: "reload" });
+        checkAbort(loadSignal);
+        helperDigest = await digest(helper);
+        checkAbort(loadSignal);
+        if (helperDigest !== manifest.helperSha256) {
+          throw new Error("Rust scene helper does not match the examples manifest.");
+        }
       }
       helperText = new TextDecoder("utf-8", { fatal: true }).decode(helper);
       checkAbort(loadSignal);
