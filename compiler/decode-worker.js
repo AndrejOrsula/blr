@@ -1,5 +1,5 @@
-import initBrotli, { brotli_dec } from "./brotli-dec-wasm/pkg/brotli_dec_wasm.js";
-import { readBoundedResponse } from "./asset-loading.js";
+import initBrotli, { brotli_dec } from "./brotli-dec-wasm/pkg/brotli_dec_wasm.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
+import { readBoundedResponse } from "./asset-loading.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
 
 let ready = false;
 let activePhase = "initialize";

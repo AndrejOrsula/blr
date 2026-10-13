@@ -1,5 +1,5 @@
-import { WASI, WASIProcExit, File, Directory, OpenFile, PreopenDirectory, wasi as wasiDefs } from "../browser-wasi-shim/dist/index.js";
-import { notifyProgress } from "../asset-loading.js";
+import { WASI, WASIProcExit, File, Directory, OpenFile, PreopenDirectory, wasi as wasiDefs } from "../browser-wasi-shim/dist/index.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
+import { notifyProgress } from "../asset-loading.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 const MAX_TIMEOUT_MS = 600_000;
@@ -92,7 +92,7 @@ function filesystemBytes(root) {
 
 function makeWorker() {
   if (typeof Worker !== "function") fail("browser Worker support is required");
-  return new Worker(new URL("./worker.js", import.meta.url), { type: "module", name: "blr-rust-compiler" });
+  return new Worker(new URL("./worker.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e", import.meta.url), { type: "module", name: "blr-rust-compiler" });
 }
 
 /** Run a standalone WASI command module in a disposable worker and in-memory filesystem. */

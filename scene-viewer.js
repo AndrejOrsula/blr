@@ -3,7 +3,6 @@ const MAX_OBJECTS = 64;
 const MAX_VERTICES = 100_000;
 const MAX_TRIANGLES = 200_000;
 const MAX_COORDINATE = 1_000_000;
-const VIEWER_PATH = "./vendor/model-viewer.min.js";
 const INITIAL_ORBIT = "35deg 65deg 105%";
 
 function invalid(message) {
@@ -208,7 +207,7 @@ function supportsWebGl(win) {
  * Mount an interactive preview in `host`. Input positions use Blender's world-space Z-up axes.
  * Colors are linear sRGB RGBA factors in [0, 1], as required by glTF PBR materials.
  */
-export function createScenePreview(host, { loadViewer = () => import(new URL(VIEWER_PATH, import.meta.url).href) } = {}) {
+export function createScenePreview(host, { loadViewer = () => import(new URL("./vendor/model-viewer.min.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e", import.meta.url).href) } = {}) {
   if (!host || typeof host.append !== "function" || !host.ownerDocument) throw new TypeError("createScenePreview requires a DOM host element");
   const doc = host.ownerDocument;
   const win = doc.defaultView;

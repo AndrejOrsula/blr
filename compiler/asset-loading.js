@@ -35,7 +35,7 @@ function isAbort(error, signal) {
   return signal?.aborted || error?.name === "AbortError";
 }
 
-/** Read a response body without ever retaining more than its declared limit. */
+/** Cap response-body bytes; joining the retained chunks also allocates the returned buffer. */
 export async function readBoundedResponse(response, { limit, label, signal, onProgress, progress } = {}) {
   progressEvent(onProgress, progress, "start", 0);
   if (!response?.ok || !response.body) {

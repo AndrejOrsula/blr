@@ -216,7 +216,9 @@
   async function start() {
     if (window.parent === window || params.getAll('run').length !== 1
       || !/^[A-Za-z0-9._:-]{1,128}$/.test(runId)
-      || [...params.keys()].some(key => key !== 'run')) throw new Error('invalid GUI frame URL');
+      || params.getAll('blr_app').length > 1
+      || (params.has('blr_app') && !/^[a-f0-9]{64}$/.test(params.get('blr_app') || ''))
+      || [...params.keys()].some(key => key !== 'run' && key !== 'blr_app')) throw new Error('invalid GUI frame URL');
     if (!window.isSecureContext || !window.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
       throw new Error('isolated secure browser context is required for the GUI runtime');
     }

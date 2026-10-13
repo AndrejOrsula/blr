@@ -1,7 +1,7 @@
-import { runWasiTool } from "./compiler/direct-host/index.js";
-import { runGuest } from "./compiler/guest/runner.js";
-import { notifyProgress } from "./compiler/asset-loading.js";
-import { loadExampleInputs, loadPinnedInputs, PINNED_TOOLCHAIN } from "./compiler-inputs.js";
+import { runWasiTool } from "./compiler/direct-host/index.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
+import { runGuest } from "./compiler/guest/runner.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
+import { notifyProgress } from "./compiler/asset-loading.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
+import { loadExampleInputs, loadPinnedInputs, PINNED_TOOLCHAIN } from "./compiler-inputs.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
 
 const MAX_SOURCE_BYTES = 256 * 1024;
 const MAX_OUTPUT_CHARS = 512 * 1024;

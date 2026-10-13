@@ -1,4 +1,4 @@
-import { validateSceneCommands } from './protocol/validate.js';
+import { validateSceneCommands } from "./protocol/validate.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
 
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 const MAX_ORDINARY_OUTPUT = 64 * 1024;
@@ -153,7 +153,7 @@ async function runBlenderRuntime(mode, { signal, onStatus, onOutput, onProgress 
   frame.hidden = true;
   frame.title = 'Isolated headless Blender scene runtime';
   frame.setAttribute('aria-hidden', 'true');
-  const frameUrl = new URL('./runtime-frame.html', import.meta.url);
+  const frameUrl = new URL("./runtime-frame.html?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e", import.meta.url);
   frameUrl.searchParams.set('run', runId);
   frame.src = frameUrl.href;
 

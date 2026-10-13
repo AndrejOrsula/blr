@@ -1,4 +1,4 @@
-import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.js';
+import { sceneProtocolLimits, validateSceneCommands } from "./protocol/validate.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
 
 (() => {
   'use strict';
@@ -516,7 +516,11 @@ import { sceneProtocolLimits, validateSceneCommands } from './protocol/validate.
       legacySize = Number(params.get('size'));
       if (!Number.isFinite(legacySize) || legacySize < 0.1 || legacySize > 4) throw new Error('size must be a number from 0.1 through 4');
     }
-    if ([...params.keys()].some(key => key !== 'run' && key !== 'size')) throw new Error('unsupported runtime URL parameter');
+    if (params.getAll('blr_app').length > 1
+      || (params.has('blr_app') && !/^[a-f0-9]{64}$/.test(params.get('blr_app') || ''))) {
+      throw new Error('invalid application revision');
+    }
+    if ([...params.keys()].some(key => key !== 'run' && key !== 'size' && key !== 'blr_app')) throw new Error('unsupported runtime URL parameter');
     if (!window.blrIsolationReady || typeof window.blrIsolationReady.then !== 'function') throw new Error('cross-origin isolation setup is unavailable');
     await window.blrIsolationReady;
     if (legacySize !== null) startRuntime({ kind: 'cube', size: legacySize }).catch(error => fail(error instanceof Error ? error.message : 'runtime startup failed'));

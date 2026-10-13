@@ -313,7 +313,7 @@ async function initialize() {
     const loadViewerModule = async () => {
       try {
         if (!viewerModule) {
-          const loading = import(assetURL("./vendor/model-viewer.min.js"));
+          const loading = import(new URL("./vendor/model-viewer.min.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e", import.meta.url).href);
           let timeout;
           try {
             viewerModule = await Promise.race([

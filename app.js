@@ -660,7 +660,7 @@ async function loadGuiTransport() {
     guiAvailable = true;
     return true;
   }
-  const guiModule = await import("./gui-transport.js");
+  const guiModule = await import("./gui-transport.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e");
   if (typeof guiModule.createBlenderGui !== "function") throw new Error("GUI transport is missing createBlenderGui.");
   createBlenderGui = guiModule.createBlenderGui;
   guiAvailable = true;
@@ -838,8 +838,12 @@ async function clearGeneratedObjects() {
 function closeBlenderEditor() {
   if (!blenderGui) return;
   if (!window.confirm("Close the Blender editor? Unsaved Blender edits will be lost. This cannot be undone.")) return;
-  if (activeRun) cancelRun();
-  blenderGui.dispose();
+  const gui = blenderGui;
+  if (activeRun) {
+    cancelRun();
+    if (activeRun) return;
+  }
+  if (blenderGui === gui) gui.dispose();
   blenderGui = null;
   guiAvailable = typeof createBlenderGui === "function";
   guiLeaseToken = null;
@@ -1400,11 +1404,11 @@ async function prepare() {
   try {
     runtimeNote.textContent = "Loading the examples and checking whether this browser can run Blender…";
     const [compilerModule, blenderModule, viewerModule, inputModule, capabilityModule] = await Promise.all([
-      import("./compiler.js"),
-      import("./blender-runner.js"),
-      import("./scene-viewer.js"),
-      import("./compiler-inputs.js"),
-      import("./gui-capability.js"),
+      import("./compiler.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
+      import("./blender-runner.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
+      import("./scene-viewer.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
+      import("./compiler-inputs.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
+      import("./gui-capability.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
     ]);
     if (typeof compilerModule.compileRust !== "function" || typeof blenderModule.runBlenderScene !== "function"
       || typeof blenderModule.runPythonScene !== "function" || typeof viewerModule.createScenePreview !== "function"
