@@ -590,6 +590,7 @@ function ensureBlenderGui(options = {}) {
         blenderGui = null;
         guiFrameVisible = false;
         guiFrameWaiter = null;
+        guiFatal = false;
         guiAvailable = typeof createBlenderGui === "function";
       }
     }
@@ -611,7 +612,8 @@ async function ensureBlenderGuiOnce({ signal, onProgress, isCurrent = () => true
     throw new Error(guiFailure || "The actual Blender browser editor is unavailable. Choose GLB preview for the preserved headless workflow.");
   }
   if (!blenderGui) {
-    blenderGui = createBlenderGui({
+    let instance;
+    instance = createBlenderGui({
       host: guiHost,
       onStatus: (message) => {
         if (isCurrent() && typeof message === "string") runtimeNote.textContent = message.slice(0, 220);
@@ -622,18 +624,23 @@ async function ensureBlenderGuiOnce({ signal, onProgress, isCurrent = () => true
           appendDiagnostic(`[Blender UI ${stream}] ${record.text.slice(0, 4000).replace(/[\r\n]+$/, "")}`);
         }
       },
-      onState: state => updateGuiState(state, { statusAllowed: isCurrent() }),
+      onState: state => {
+        if (!instance || blenderGui === instance) updateGuiState(state, { statusAllowed: isCurrent() });
+      },
       onProgress,
     });
+    blenderGui = instance;
   }
-  if (!blenderGui.ready) await blenderGui.start();
+  const instance = blenderGui;
+  if (!instance.ready) await instance.start();
   if (signal?.aborted) throw new DOMException("Blender GUI startup canceled", "AbortError");
-  if (!blenderGui.ready) throw new Error("Blender did not report an initialized editor runtime.");
-  guiLeaseToken = blenderGui.lease ?? guiLeaseToken;
-  if (blenderGui.visibleFrame === true) guiFrameVisible = true;
+  if (!instance.ready) throw new Error("Blender did not report an initialized editor runtime.");
+  if (blenderGui !== instance) throw new Error("The Blender GUI startup was replaced before it completed.");
+  guiLeaseToken = instance.lease ?? guiLeaseToken;
+  if (instance.visibleFrame === true) guiFrameVisible = true;
   if (!guiFrameVisible) await waitForGuiFrame(signal);
   updateGuiActions();
-  return blenderGui;
+  return instance;
 }
 
 function waitForGuiFrame(signal) {
@@ -660,7 +667,7 @@ async function loadGuiTransport() {
     guiAvailable = true;
     return true;
   }
-  const guiModule = await import("./gui-transport.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e");
+  const guiModule = await import("./gui-transport.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba");
   if (typeof guiModule.createBlenderGui !== "function") throw new Error("GUI transport is missing createBlenderGui.");
   createBlenderGui = guiModule.createBlenderGui;
   guiAvailable = true;
@@ -1404,11 +1411,11 @@ async function prepare() {
   try {
     runtimeNote.textContent = "Loading the examples and checking whether this browser can run Blender…";
     const [compilerModule, blenderModule, viewerModule, inputModule, capabilityModule] = await Promise.all([
-      import("./compiler.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
-      import("./blender-runner.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
-      import("./scene-viewer.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
-      import("./compiler-inputs.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
-      import("./gui-capability.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e"),
+      import("./compiler.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
+      import("./blender-runner.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
+      import("./scene-viewer.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
+      import("./compiler-inputs.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
+      import("./gui-capability.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
     ]);
     if (typeof compilerModule.compileRust !== "function" || typeof blenderModule.runBlenderScene !== "function"
       || typeof blenderModule.runPythonScene !== "function" || typeof viewerModule.createScenePreview !== "function"

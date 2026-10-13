@@ -13,13 +13,13 @@
     },
     {
       "path": "app.js",
-      "size": 79580,
-      "sha256": "813d2e0fa0e9c1e5fb830b11b78dae60f4a26ed29f69993c485ffde5e6e713aa"
+      "size": 79838,
+      "sha256": "5a3315f8d68b72c9fa49ad7da49a5089744bf378110c44e3de7eb58d6824b0ab"
     },
     {
       "path": "blender-runner.js",
       "size": 14470,
-      "sha256": "5ec37891154e0476452f57215a023743b2e7374add4125e74fb5d08e52a287a9"
+      "sha256": "e69abb6fb979d715b688a8a87a2295537803719d6e0c0b314105d1ce45efac5d"
     },
     {
       "path": "blr_demo.rs",
@@ -34,12 +34,12 @@
     {
       "path": "coi-serviceworker.js",
       "size": 9629,
-      "sha256": "27c03f250c525d51e6589e10d1155886268134e77d359a3c61804f0f4f1f37d2"
+      "sha256": "9ab268223faebbe0c10d489d60821e69daf467da2363caed04ec1165613e8d02"
     },
     {
       "path": "compiler-inputs.js",
       "size": 23969,
-      "sha256": "1c93b3be505ce85b5b1d16f1568c830213112743af8bdd2edf86f0a9f80d508f"
+      "sha256": "fbf87c3e77b566ca3055e8eb5b2183c51258192075f7ff897e772590ab8e71bc"
     },
     {
       "path": "compiler-licenses/Apache-2.0.txt",
@@ -139,7 +139,7 @@
     {
       "path": "compiler.js",
       "size": 10763,
-      "sha256": "d90c6639724c06b57f5804a4868cde22a6f3c4ca25131fed73b531e219448733"
+      "sha256": "5316da488cff7d49347a7730f2a6b18d2ae9178b8dc977c4925cf84b7e0a3188"
     },
     {
       "path": "compiler/asset-loading.js",
@@ -184,22 +184,22 @@
     {
       "path": "compiler/browser-wasi-shim/dist/fd.js",
       "size": 1979,
-      "sha256": "1dd09ba4452382eba558e25bfd18f6e1cbc1ca2de49f12c09d84393e57289675"
+      "sha256": "1fc0547a65e631536f00af629a6187bac1e47754ae58a95b592e5b2de7af58be"
     },
     {
       "path": "compiler/browser-wasi-shim/dist/fs_mem.js",
       "size": 12425,
-      "sha256": "7e7b49b05686905a4d05f5cdabe5ccc0ec1efc675534de6c33063a8f92567d84"
+      "sha256": "e4efdb2250b2bacb1c093b59b55e6a163ca1bd7037f6d4cb26663d7d6745c758"
     },
     {
       "path": "compiler/browser-wasi-shim/dist/fs_opfs.js",
       "size": 2426,
-      "sha256": "78998d7963334443979c43bd58c2e1f9888cb2bcc764dda028c42fd40c43cb68"
+      "sha256": "951c7ab8d973800d9ab6bec07c95b258a9ad9dfcbd5b1e8280e3938b5f000791"
     },
     {
       "path": "compiler/browser-wasi-shim/dist/index.js",
       "size": 754,
-      "sha256": "04b7c6c0f451c7d2c40acd86caf2f37134d5394f927cf1087d374c052b276c05"
+      "sha256": "60fe4168c8b7156e4d1bec32a6cc2d1e5ac6819e6f38b42819e67253e9730f73"
     },
     {
       "path": "compiler/browser-wasi-shim/dist/strace.js",
@@ -214,7 +214,7 @@
     {
       "path": "compiler/browser-wasi-shim/dist/wasi.js",
       "size": 16575,
-      "sha256": "f5c45a752658e842f7c2247652869a2365984d4be73a539ba429ddb58866d610"
+      "sha256": "830a6a892ed26aa586c8041ab214c69ef3fb22d01448d6467e91b2d26ef668e9"
     },
     {
       "path": "compiler/browser-wasi-shim/LICENSE-APACHE",
@@ -239,12 +239,12 @@
     {
       "path": "compiler/decode-worker.js",
       "size": 3302,
-      "sha256": "405e37e147a490cc99ebd6f18f48c5ea6387a29f9952d4db3530830f612a42f3"
+      "sha256": "0a55cb20ff2d3080864906a1368b84f0a16e292a36611c2bd32ebc2fbb2f52ce"
     },
     {
       "path": "compiler/direct-host/index.js",
       "size": 22512,
-      "sha256": "9d4e3398f2a121ad8741b7d4a4331997bf254be30d1c132f77076bc28fd169b4"
+      "sha256": "cc94349de7217cc3fd395bc6ecfbc958e27f5689ef265f8dfabe456a4edd8f1c"
     },
     {
       "path": "compiler/direct-host/worker.js",
@@ -254,7 +254,7 @@
     {
       "path": "compiler/guest/runner.js",
       "size": 6473,
-      "sha256": "aa80872a3a72647fe8022a7b49465de520a9c28a91f29c46df8508f82ab6ccdb"
+      "sha256": "008b275662a87ee72689aa9385e31a220a6553b394e18c16aa41effb59252f94"
     },
     {
       "path": "compiler/guest/wasm-policy.js",
@@ -264,17 +264,17 @@
     {
       "path": "compiler/guest/worker.js",
       "size": 5412,
-      "sha256": "37445562a206078b7affc3156c438dba92bfd939e6bdb6fb5d7ff7148fe526d1"
+      "sha256": "549026a26fd08de9566887fde5edc88f2c3e31251e823bfb8befc587f1514cf8"
     },
     {
       "path": "examples.json",
-      "size": 13501,
-      "sha256": "48c5a9b34236a31bc16b7c16e0dff72f35d4ab667c743af0eac82f81859c9ca5"
+      "size": 13503,
+      "sha256": "dfd7b0fd1f318c9eea6396449f79a6e8dde5dc9a40268fe213b791a192c59f0b"
     },
     {
       "path": "gallery.js",
       "size": 24637,
-      "sha256": "38acaa1d5a3b372213efb513d0657486efaf6a5dbe3f1046cd2e12c66ffd021d"
+      "sha256": "51ec9a9fe69f079267a9bd82d06accb4a83123d939b661d37bba8c0a7f0c906f"
     },
     {
       "path": "gallery.json",
@@ -449,27 +449,27 @@
     {
       "path": "gui-capability.js",
       "size": 4683,
-      "sha256": "646823c88c19ede20da43eee257686e49a9d8522ee75229e42bf7ffdc6f6d12b"
+      "sha256": "805f1f152169236b931cd1d01dc376acbdad1f58f6893bbbe6e5ea6ac2c09efd"
     },
     {
       "path": "gui-frame.html",
       "size": 899,
-      "sha256": "7ceb3227b5f412b9e224423644ac349ac6b41b55e90ab31bac0b52f9e8f99a2a"
+      "sha256": "e000dff41d5a6ffc79a93b239752ac15e89d62e8c2280b0a1199d45bc9b97359"
     },
     {
       "path": "gui-frame.js",
-      "size": 14603,
-      "sha256": "53f17ed07e44d01873d5a60784357ee4afbbcb041f17852855f29b4bf63947f3"
+      "size": 14704,
+      "sha256": "0d6463c9a403b9ec963b88ee2fbbd364e01865fa5cde50d3ed1acbb8ce77f26e"
     },
     {
       "path": "gui-transport.js",
       "size": 32266,
-      "sha256": "093a658ef0173bccaaa21794b2f67d83a5ed14b0b10f644c82fd20da9c894cf0"
+      "sha256": "93f70ceb33db18b8a58502cbb9a5f6e2f280706ca1bc12b7908a7fe6cd964cf8"
     },
     {
       "path": "index.html",
       "size": 11652,
-      "sha256": "70b16f2428cb6b7c52d1bc2df0d20b883d4d7559027b7a0b75c3e05f00a40ea2"
+      "sha256": "07431bf6a3e85fc3f9e54b9d2bbc0c61345537d748cde75eca01256172dc04f0"
     },
     {
       "path": "isolation.js",
@@ -494,12 +494,12 @@
     {
       "path": "runtime-frame.html",
       "size": 790,
-      "sha256": "f9df24750f8b3c3a52f5a533497323bfb44f0abce797d8f2387f2b811affdf97"
+      "sha256": "320a8dd6394bc5040d08721c458b4a4baa7d7c4c46d8779520baa9e778b2cab9"
     },
     {
       "path": "runtime-frame.js",
       "size": 30067,
-      "sha256": "f5577be817efb9f7851f87f9a68c62683289aa31c68008a29877680718b6fd54"
+      "sha256": "4a4f1ca31c9c906be855889f292786d79df70725ad0c74ea505ad80cd9a7a2c4"
     },
     {
       "path": "runtime-licenses/Apache-2.0.txt",
@@ -1353,38 +1353,38 @@
     },
     {
       "path": "runtime/blender.wasm.gz",
-      "size": 33040596,
-      "sha256": "c92b22bda8da0bd59fdb2a1691ec9cba9d1a633a5aed1dcabdd6e4b512fc4e48"
+      "size": 33039789,
+      "sha256": "739150d6ad9bcd42662682dee87bcc1ceedd47454b74e82cf531dafc613c41f0"
     },
     {
       "path": "runtime/gui/blender.js",
       "size": 317487,
-      "sha256": "b01a103048d4a4815add2190738d008e1dde99f0ade5439a16167737c5e5bdda"
+      "sha256": "d466b16ffa33d6b5d0698dd90e74dba3bfdb7a4fa67c467bdf0deb80ca6e6ec5"
     },
     {
       "path": "runtime/gui/blender.wasm.gz",
-      "size": 60270117,
-      "sha256": "b0f0bff893cc6d4eaf88cd422548c207045acd4029165b79a91d01ade767f8cb"
+      "size": 60270558,
+      "sha256": "02eef9248b481e9c06bed980210658ff01785319cac79d1a163b9384d21da1bd"
     },
     {
       "path": "runtime/gui/manifest.json",
       "size": 428,
-      "sha256": "f5f324f5ba791fef2bc182a046aedef609e8905a9d778c2d635bcf2d97dbd86e"
+      "sha256": "0eb24ed22d7e9758ec2ccbf121592e85e1d8265ebaba5efa16d35dde9d175d9f"
     },
     {
       "path": "runtime/manifest.json",
       "size": 428,
-      "sha256": "837da8ca47e2b313dbdc3fc111b49395ffe62d76d95d78b0f4de147ffb7a9714"
+      "sha256": "572ad08feb94c92cf425e20f304b9222fed1de2657a73e5aaa11a74f0f45574a"
     },
     {
       "path": "scene-viewer.js",
       "size": 17421,
-      "sha256": "93e91d4c3896a1fc62fa15386a0bb4b91958a1b83624dd51e73ef7270cca72d9"
+      "sha256": "b11a7abf490edf8d14f0b0d3bd389b6a524588a545fc36c753d0c382d20c816f"
     },
     {
       "path": "showcase/index.html",
       "size": 7762,
-      "sha256": "d2e309b86b090bce6fb813db5f13330fd3d83edad145b7ea917cc6f505dc9501"
+      "sha256": "990022344037210d6be33cae3ef9429bf1a96a25a358fe3cacee6ed6d5c35f40"
     },
     {
       "path": "site.css",

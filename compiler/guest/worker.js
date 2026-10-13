@@ -1,5 +1,5 @@
-import { WASI, ConsoleStdout, File, OpenFile, wasi as wasiDefs } from "../browser-wasi-shim/dist/index.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
-import { inspectWasm, MAX_LINE_BYTES, MAX_OUTPUT_BYTES } from "./wasm-policy.js?blr_app=9282b9d231ff7b61276521b7d9f2c2caf25e4dd34eb49dac28a63b89d0ea837e";
+import { WASI, ConsoleStdout, File, OpenFile, wasi as wasiDefs } from "../browser-wasi-shim/dist/index.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba";
+import { inspectWasm, MAX_LINE_BYTES, MAX_OUTPUT_BYTES } from "./wasm-policy.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba";
 
 self.postMessage({ type: "ready" });
 

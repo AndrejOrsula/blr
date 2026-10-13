@@ -276,6 +276,7 @@
         '--gpu-backend', 'webgpu',
         '--env-system-datafiles', '/assets/5.2/datafiles',
         '--env-system-scripts', '/assets/5.2/scripts',
+        '--python-expr', "import bpy; bpy.context.preferences.filepaths.file_preview_type = 'NONE'",
         '--python', '/assets/gui/session_driver.py',
       ],
       preRun: [() => {
