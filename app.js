@@ -81,6 +81,7 @@ let guiScenePresent = false;
 let guiSummary = null;
 let guiSnapshotPresent = false;
 let guiSnapshotFresh = false;
+let guiSnapshotGeneration = 0;
 let glbIdentity = null;
 let glbSummary = null;
 let currentPreview = false;
@@ -455,6 +456,7 @@ function updateGuiState(state, { statusAllowed = true } = {}) {
       guiPendingCreateRequestId = state.requestId;
     }
     if (state.state === "invalidated" && state.fatal !== true) {
+      guiSnapshotGeneration += 1;
       guiDocumentInvalidated = true;
       guiSnapshotPreviousDocument = guiSnapshotPresent || Boolean(state.lastSnapshot);
       guiAvailable = true;
@@ -476,6 +478,7 @@ function updateGuiState(state, { statusAllowed = true } = {}) {
       appendDiagnostic("[Blender UI] Editor bridge resumed after document load.");
       if (state.lastSnapshot?.source === "create" && !state.lastSnapshotStale) syncActiveGuiScene(state.lastSnapshot);
     } else if (state.fatal === true || state.state === "fatal" || state.state === "poisoned" || state.state === "failed") {
+      guiSnapshotGeneration += 1;
       guiDocumentInvalidated = false;
       guiFrameWaiter?.reject(new Error(state.message || "The Blender GUI runtime became unavailable."));
       guiFrameWaiter = null;
@@ -502,6 +505,7 @@ function updateGuiState(state, { statusAllowed = true } = {}) {
       if (afterCancel) guiCanceledCreateRequestId = null;
     }
     if (state.state === "disposed") {
+      guiSnapshotGeneration += 1;
       guiFrameWaiter?.reject(new Error("The Blender editor was closed before its canvas became available."));
       guiFrameWaiter = null;
       guiAvailable = false;
@@ -538,8 +542,11 @@ function syncActiveGuiScene(snapshot, { afterCancel = false, statusAllowed = tru
 }
 
 async function showLastValidatedSnapshot(snapshot) {
+  const generation = ++guiSnapshotGeneration;
+  const owner = blenderGui;
   try {
     const summary = await preview.show(snapshot.scene);
+    if (generation !== guiSnapshotGeneration || owner !== blenderGui) return;
     guiSnapshotPresent = true;
     guiSnapshotFresh = false;
     guiIdentity = snapshot.identity ?? guiIdentity;
@@ -667,7 +674,7 @@ async function loadGuiTransport() {
     guiAvailable = true;
     return true;
   }
-  const guiModule = await import("./gui-transport.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba");
+  const guiModule = await import("./gui-transport.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b");
   if (typeof guiModule.createBlenderGui !== "function") throw new Error("GUI transport is missing createBlenderGui.");
   createBlenderGui = guiModule.createBlenderGui;
   guiAvailable = true;
@@ -776,14 +783,19 @@ async function startBlender() {
 
 async function snapshotBlenderScene() {
   if (!blenderGui?.ready || !guiLeaseToken || blenderGui.busy || activeRun) return;
+  const owner = blenderGui;
+  const leaseToken = guiLeaseToken;
+  const generation = ++guiSnapshotGeneration;
   const controller = new AbortController();
   snapshotGlbButton.disabled = true;
   runtimeNote.textContent = "Capturing the current editable Blender scene for GLB preview…";
   try {
-    const result = await blenderGui.snapshot({ signal: controller.signal });
-    if (!result || result.leaseToken !== guiLeaseToken) throw new Error("Blender snapshot did not match the active generated-scene lease.");
+    const result = await owner.snapshot({ signal: controller.signal });
+    if (generation !== guiSnapshotGeneration || owner !== blenderGui || leaseToken !== guiLeaseToken || guiDocumentInvalidated || guiFatal) return;
+    if (!result || result.leaseToken !== leaseToken) throw new Error("Blender snapshot did not match the active generated-scene lease.");
     setPreviewMode("glb");
     const summary = await preview.show(result.scene);
+    if (generation !== guiSnapshotGeneration || owner !== blenderGui || leaseToken !== guiLeaseToken || guiDocumentInvalidated || guiFatal) return;
     guiIdentity = result.identity;
     glbIdentity = result.identity;
     glbSummary = summary;
@@ -800,6 +812,7 @@ async function snapshotBlenderScene() {
     appendDiagnostic(`[snapshot] Generated Blender scene objects copied to GLB preview · ${summary.objects} objects · ${summary.vertices} vertices · ${summary.triangles} triangles.`);
     updateGuiActions();
   } catch (error) {
+    if (generation !== guiSnapshotGeneration || owner !== blenderGui || leaseToken !== guiLeaseToken || guiDocumentInvalidated || guiFatal) return;
     const reason = errorText(error, "Blender snapshot failed.");
     runtimeNote.textContent = guiFatal
       ? `${reason} Blender scene state is uncertain; close the editor explicitly to discard it.`
@@ -812,11 +825,14 @@ async function snapshotBlenderScene() {
 
 async function clearGeneratedObjects() {
   if (!blenderGui?.ready || !guiLeaseToken || blenderGui.busy || activeRun) return;
+  const owner = blenderGui;
+  const generation = guiSnapshotGeneration;
+  const clearingLease = guiLeaseToken;
   clearGeneratedButton.disabled = true;
   runtimeNote.textContent = "Removing only objects from the active generated-scene lease…";
   try {
-    const clearingLease = guiLeaseToken;
-    const result = await blenderGui.reset({});
+    const result = await owner.reset({});
+    if (generation !== guiSnapshotGeneration || owner !== blenderGui || guiDocumentInvalidated || guiFatal) return;
     if (!result?.reset || result.leaseToken !== clearingLease) throw new Error("Blender did not confirm reset of the active generated-scene lease.");
     guiLeaseToken = null;
     guiScenePresent = false;
@@ -832,6 +848,7 @@ async function clearGeneratedObjects() {
     appendDiagnostic(`[Blender UI] Cleared generated objects · removed ${result.removed ?? 0} · missing ${result.missing ?? 0}.`);
     updateGuiActions();
   } catch (error) {
+    if (generation !== guiSnapshotGeneration || owner !== blenderGui || guiDocumentInvalidated || guiFatal) return;
     const reason = errorText(error, "Could not clear generated Blender objects.");
     runtimeNote.textContent = guiFatal
       ? `${reason} Blender scene state is uncertain; the editor remains open until explicitly closed.`
@@ -850,6 +867,7 @@ function closeBlenderEditor() {
     cancelRun();
     if (activeRun) return;
   }
+  guiSnapshotGeneration += 1;
   if (blenderGui === gui) gui.dispose();
   blenderGui = null;
   guiAvailable = typeof createBlenderGui === "function";
@@ -1411,11 +1429,11 @@ async function prepare() {
   try {
     runtimeNote.textContent = "Loading the examples and checking whether this browser can run Blender…";
     const [compilerModule, blenderModule, viewerModule, inputModule, capabilityModule] = await Promise.all([
-      import("./compiler.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
-      import("./blender-runner.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
-      import("./scene-viewer.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
-      import("./compiler-inputs.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
-      import("./gui-capability.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba"),
+      import("./compiler.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
+      import("./blender-runner.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
+      import("./scene-viewer.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
+      import("./compiler-inputs.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
+      import("./gui-capability.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
     ]);
     if (typeof compilerModule.compileRust !== "function" || typeof blenderModule.runBlenderScene !== "function"
       || typeof blenderModule.runPythonScene !== "function" || typeof viewerModule.createScenePreview !== "function"

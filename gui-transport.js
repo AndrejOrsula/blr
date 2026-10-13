@@ -1,4 +1,4 @@
-import { validateSceneCommands } from "./protocol/validate.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba";
+import { validateSceneCommands } from "./protocol/validate.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b";
 
 const CHANNEL = 'blr-gui-transport-v1';
 const MAX_QUEUE = 8;
@@ -255,7 +255,7 @@ export function createBlenderGui({ host, onStatus, onOutput, onProgress, onState
   frame.title = 'Interactive Blender 5.2 GUI';
   frame.setAttribute('allow', 'cross-origin-isolated');
   frame.setAttribute('allowfullscreen', '');
-  const frameUrl = new URL("./gui-frame.html?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba", import.meta.url);
+  const frameUrl = new URL("./gui-frame.html?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b", import.meta.url);
   frameUrl.searchParams.set('run', runId);
   frame.src = frameUrl.href;
   frame.style.width = '100%';

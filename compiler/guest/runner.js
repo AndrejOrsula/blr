@@ -1,7 +1,7 @@
 import {
   inspectWasm,
   MAX_MODULE_BYTES,
-} from "./wasm-policy.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba";
+} from "./wasm-policy.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_TIMEOUT_MS = 60_000;
@@ -40,7 +40,7 @@ export function runGuest(wasmBytes, { signal, onOutput, timeoutMs = DEFAULT_TIME
 
   let worker;
   try {
-    worker = new Worker(new URL("./worker.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba", import.meta.url), {
+    worker = new Worker(new URL("./worker.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b", import.meta.url), {
       type: "module",
       name: "blr-untrusted-rust-guest",
     });
@@ -176,4 +176,4 @@ export function runGuest(wasmBytes, { signal, onOutput, timeoutMs = DEFAULT_TIME
   });
 }
 
-export { MAX_MODULE_BYTES, MAX_OUTPUT_BYTES } from "./wasm-policy.js?blr_app=fe2424e19037e1e8e7d38a3c9db9c0b23a65146b5a381da78ddc353447f3e9ba";
+export { MAX_MODULE_BYTES, MAX_OUTPUT_BYTES } from "./wasm-policy.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b";
