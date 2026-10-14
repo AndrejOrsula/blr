@@ -23,6 +23,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .mark { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid var(--demo-accent); border-radius: var(--demo-radius-control); color: var(--demo-accent); font-size: 16px; }
 .wordmark-light { color: var(--demo-muted); font-weight: 450; letter-spacing: 0; }
 .demo-home { font-size: 12px; font-weight: 600; }
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
 .intro { min-height: 100px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-block: 15px; }
 .intro-copy { min-width: 0; }
 .eyebrow { margin: 0 0 6px; color: var(--demo-muted); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
@@ -140,6 +141,7 @@ footer { min-height: 54px; display: flex; align-items: center; justify-content: 
   .wordmark { font-size: 12px; }
   .wordmark-light { font-size: 10px; }
   .demo-home { font-size: 11px; }
+  .topbar-actions { gap: 8px; }
   .intro { display: block; padding-block: 17px 14px; }
   .intro h1 { font-size: clamp(25px, 7.2vw, 32px); }
   .lede { margin-top: 7px; font-size: 11px; }

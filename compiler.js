@@ -1,7 +1,7 @@
-import { runWasiTool } from "./compiler/direct-host/index.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926";
-import { runGuest } from "./compiler/guest/runner.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926";
-import { notifyProgress } from "./compiler/asset-loading.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926";
-import { loadExampleInputs, loadPinnedInputs, PINNED_TOOLCHAIN } from "./compiler-inputs.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926";
+import { runWasiTool } from "./compiler/direct-host/index.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
+import { runGuest } from "./compiler/guest/runner.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
+import { notifyProgress } from "./compiler/asset-loading.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
+import { loadExampleInputs, loadPinnedInputs, PINNED_TOOLCHAIN } from "./compiler-inputs.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
 
 const MAX_SOURCE_BYTES = 256 * 1024;
 const MAX_OUTPUT_CHARS = 512 * 1024;

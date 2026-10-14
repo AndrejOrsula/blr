@@ -674,7 +674,7 @@ async function loadGuiTransport() {
     guiAvailable = true;
     return true;
   }
-  const guiModule = await import("./gui-transport.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926");
+  const guiModule = await import("./gui-transport.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313");
   if (typeof guiModule.createBlenderGui !== "function") throw new Error("GUI transport is missing createBlenderGui.");
   createBlenderGui = guiModule.createBlenderGui;
   guiAvailable = true;
@@ -1429,11 +1429,11 @@ async function prepare() {
   try {
     runtimeNote.textContent = "Loading BLR…";
     const [compilerModule, blenderModule, viewerModule, inputModule, capabilityModule] = await Promise.all([
-      import("./compiler.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
-      import("./blender-runner.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
-      import("./scene-viewer.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
-      import("./compiler-inputs.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
-      import("./gui-capability.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
+      import("./compiler.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
+      import("./blender-runner.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
+      import("./scene-viewer.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
+      import("./compiler-inputs.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
+      import("./gui-capability.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
     ]);
     if (typeof compilerModule.compileRust !== "function" || typeof blenderModule.runBlenderScene !== "function"
       || typeof blenderModule.runPythonScene !== "function" || typeof viewerModule.createScenePreview !== "function"
@@ -1585,6 +1585,16 @@ $("#pan-left").addEventListener("click", () => preview.pan(-0.15, 0));
 $("#pan-right").addEventListener("click", () => preview.pan(0.15, 0));
 $("#preview-reset").addEventListener("click", () => preview.reset());
 $("#download-scene").addEventListener("click", () => preview.download());
+
+// Keep the browser chrome on the demo kit's page background as the scheme changes.
+function syncThemeColor() {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const background = document.documentElement
+    && window.getComputedStyle?.(document.documentElement).getPropertyValue("--demo-bg").trim();
+  if (meta && background) meta.setAttribute("content", background);
+}
+window.addEventListener("demo-theme", syncThemeColor);
+syncThemeColor();
 
 window.__blrPlayground = {
   get activeRun() { return activeRun?.id ?? null; },

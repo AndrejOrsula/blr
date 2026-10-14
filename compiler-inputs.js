@@ -1,4 +1,4 @@
-import { notifyProgress, readBoundedJson, readBoundedResponse, runWithAssetLoadBounds } from "./compiler/asset-loading.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926";
+import { notifyProgress, readBoundedJson, readBoundedResponse, runWithAssetLoadBounds } from "./compiler/asset-loading.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
 
 const MAX_HELPER_BYTES = 128 * 1024;
 const MAX_COMPILER_MANIFEST_BYTES = 8 * 1024;
@@ -208,7 +208,7 @@ async function decodeAsset(file, pin, signal, onProgress, asset) {
       totalBytes: pin.bytes, source: "network-or-cache", error: null,
     });
   checkAbort(signal);
-  const worker = new Worker(new URL("./compiler/decode-worker.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926", import.meta.url), {
+  const worker = new Worker(new URL("./compiler/decode-worker.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313", import.meta.url), {
     type: "module",
     name: "blr-pinned-toolchain-decoder",
   });
