@@ -3,45 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101822">
-  <meta name="description" content="Edit Rust examples, create and edit Blender scenes in your browser, or switch to the GLB mesh preview.">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101822' stroke='%23e7a36b' stroke-width='3'/%3E%3Ctext x='18' y='48' font-family='Arial,sans-serif' font-size='43' font-weight='700' fill='%23e7a36b'%3EB%3C/text%3E%3C/svg%3E">
-  <title>BLR · Rust and Blender playground</title>
-  <link rel="stylesheet" href="./app.css?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b">
-  <script src="./isolation.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"></script>
-  <script type="module" src="./app.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"></script>
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Write and run Rust or Python examples with Blender in your browser.">
+  <link rel="icon" type="image/svg+xml" href="./demo-kit/favicon.svg">
+  <title>BLR · Runnable Rust and Blender playground</title>
+  <script src="./demo-kit/theme.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"></script>
+  <link rel="stylesheet" href="./demo-kit/tokens.css?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926">
+  <link rel="stylesheet" href="./demo-kit/local-font.css?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926">
+  <link rel="stylesheet" href="./app.css?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926">
+  <script src="./isolation.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"></script>
+  <script type="module" src="./app.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"></script>
 </head>
 <body>
   <header class="topbar">
-    <a class="wordmark" href="./" aria-label="BLR playground home"><span class="mark" aria-hidden="true">B</span><span>BLR<span class="wordmark-light"> / browser lab</span></span></a>
-    <nav aria-label="Main navigation">
-      <a href="#playground">Playground</a>
-      <a href="./showcase/">Examples</a>
-      <a href="#about">About</a>
-    </nav>
+    <a class="wordmark" href="./" aria-label="BLR playground home"><span class="mark" aria-hidden="true">B</span><span>BLR <span class="wordmark-light">/ browser lab</span></span></a>
+    <a class="demo-home" href="/" aria-label="Back to Andrej Orsula’s portfolio">Portfolio <span aria-hidden="true">↗</span></a>
   </header>
 
   <main>
     <section class="intro" aria-labelledby="page-title">
       <div class="intro-copy">
         <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> Experimental · runs locally in your browser</p>
-        <h1 id="page-title">Write Rust.<br><span>See Blender geometry.</span></h1>
-        <p class="lede">Edit a Rust or Python example, then run it through Blender 5.2.0 and blr. Edit the result in Blender's browser workspace or switch to the selectable GLB preview.</p>
-        <a class="text-link" href="./showcase/">Explore the finished examples <span aria-hidden="true">↗</span></a>
+        <h1 id="page-title">Write code. Run Blender.</h1>
       </div>
-      <div class="hero-art" aria-hidden="true">
-        <div class="orbit orbit-a"></div><div class="orbit orbit-b"></div>
-        <svg viewBox="0 0 250 228" role="presentation">
-          <path class="cube-shadow" d="M125 197 41 153l84-44 84 44z"/><path class="cube-side-left" d="M125 186 51 148V67l74 39z"/><path class="cube-side-right" d="m125 186 74-38V67l-74 39z"/><path class="cube-top" d="m51 67 74-39 74 39-74 40z"/><path class="cube-line" d="m51 67 74 40 74-40M125 107v79"/><circle class="cube-point" cx="125" cy="28" r="3"/><circle class="cube-point" cx="199" cy="67" r="3"/><circle class="cube-point" cx="51" cy="67" r="3"/>
-        </svg>
-        <span class="art-caption">Illustrative geometry</span>
-      </div>
+      <p class="lede">Edit a Rust or Python example, run it, then inspect the scene in Blender or the GLB preview.</p>
     </section>
 
     <section class="playground" id="playground" aria-labelledby="playground-title">
       <div class="section-head">
-        <div><p class="eyebrow">01 / Browser playground</p><h2 id="playground-title">Build a scene</h2></div>
-        <p class="runtime-tag"><span aria-hidden="true">◉</span> Rust + Python · Blender 5.2.0</p>
+        <h2 id="playground-title">Runnable workspace</h2>
+        <p class="runtime-tag"><span aria-hidden="true">●</span> Rust + Python · Blender 5.2.0</p>
       </div>
 
       <div class="workspace">
@@ -58,16 +49,16 @@
           </div>
           <p class="editor-help" id="editor-help">Tab inserts spaces. Press Escape to move to Run. <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> runs the current source.</p>
           <div class="editor-actions">
-            <button class="button-primary" id="run-button" type="button" disabled><span aria-hidden="true">▶</span> <span>Loading playground…</span></button>
+            <button class="button-primary" id="run-button" type="button" disabled><span aria-hidden="true">▶</span> <span>Loading BLR…</span></button>
             <button class="button-secondary" id="cancel-button" type="button" hidden>Cancel run</button>
             <button class="button-quiet" id="reset-button" type="button" disabled>Reset example</button>
           </div>
-          <p class="runtime-note" id="runtime-note" role="status">Loading examples and checking browser isolation…</p>
+          <p class="runtime-note" id="runtime-note" role="status">Loading BLR…</p>
         </section>
 
         <section class="viewport-pane" aria-labelledby="viewport-title">
           <div class="pane-heading viewport-heading">
-            <div><h3 id="viewport-title">Blender workspace and mesh preview</h3><p>Choose the editable Blender UI or the GLB preview</p></div>
+            <div><h3 id="viewport-title">Scene preview</h3><p>Choose the Blender editor or GLB preview</p></div>
             <span class="preview-badge" id="preview-badge">Waiting for a run</span>
           </div>
           <div class="preview-mode-row">
@@ -80,8 +71,8 @@
           <div class="viewport-frame" id="preview-host">
             <div class="viewport-empty" id="viewport-empty">
               <div class="empty-cube" aria-hidden="true"><svg viewBox="0 0 80 76"><path d="m40 6 31 17v31L40 71 9 54V23zM9 23l31 18 31-18M40 41v30"/></svg></div>
-              <p id="viewport-message">Your Blender-created mesh will appear here.</p>
-              <span>Browser-hosted Blender 5.2 workspace</span>
+              <p id="viewport-message">Run an example to create a Blender scene.</p>
+              <span>Browser-hosted Blender workspace</span>
             </div>
             <div class="blender-gui-host" id="blender-gui-host" hidden title="Blender 5.2 workspace"></div>
             <div class="glb-preview-host" id="glb-preview-host" hidden></div>
@@ -111,7 +102,7 @@
       </div>
 
       <section class="run-panel" aria-labelledby="run-title" aria-live="polite" aria-busy="false">
-        <div class="run-panel-head"><div><p class="eyebrow">02 / Run log</p><h3 id="run-title">Compile and runtime diagnostics</h3></div><span class="phase" id="phase" data-state="idle">Preparing</span></div>
+        <div class="run-panel-head"><div><p class="eyebrow">Run output</p><h3 id="run-title">Compile and runtime diagnostics</h3></div><span class="phase" id="phase" data-state="idle">Preparing</span></div>
         <div class="loading-progress" id="loading-progress" hidden><label id="loading-progress-label" for="loading-progress-bar"></label><progress id="loading-progress-bar" max="100" aria-label="Loading progress" aria-valuetext="Loading"></progress><span id="loading-progress-amount"></span></div>
         <ol class="run-stages" aria-label="Run stages">
           <li id="stage-compile" data-state="idle"><span class="stage-index">1</span><span>Rust compile</span></li>
@@ -120,17 +111,19 @@
         </ol>
         <pre class="diagnostics" id="diagnostics" tabindex="0" aria-label="Compiler and Blender output">Examples and runtime status will appear here.</pre>
       </section>
-    </section>
 
-    <section class="about-section" id="about" aria-labelledby="about-title">
-      <div class="about-heading"><p class="eyebrow">03 / What this is</p><h2 id="about-title">Rust in.<br>Blender out.</h2></div>
-      <div class="about-copy">
-        <p>Rust examples compile to bounded scene commands. Python examples execute in Blender's embedded Python runtime with access to bpy and the current scene. A successful Rust or Python run replaces the previous generated scene; separately created Blender objects remain outside that lease. Canceling a dispatched Python run closes Blender because Python code cannot be safely interrupted. Snapshot / Update GLB exports the generated objects. The preserved headless path also creates GLB previews.</p>
-        <p>Programs use the visible <code>blr_demo.rs</code> helper, which supports six primitive kinds, transforms, tint metadata and up to 64 objects. It uses Rust's bundled standard library, not private native blr sources or arbitrary Cargo dependencies. Blender's Workbench viewport uses gray Solid shading; the GLB snapshot turns tint metadata into browser materials. These views do not provide EEVEE or Cycles rendering. Compiler and Blender assets load only after you start the editor or run a program.</p>
-        <div class="about-links"><a href="./showcase/">Browse finished examples <span aria-hidden="true">↗</span></a><a href="./blr_demo.rs">Browser demo helper source</a><a href="./runtime-notices.html">Blender runtime notices</a><a href="./compiler-notices.html">Rust compiler and sysroot notices</a><a href="./LICENSE-APACHE">Project license: Apache-2.0</a><a href="./LICENSE-MIT">Project license: MIT</a><a href="./vendor/NOTICE.html">Viewer third-party notices</a></div>
-      </div>
+      <details class="about-details">
+        <summary>About this playground and its limits</summary>
+        <div class="about-copy">
+          <p>Rust examples compile to bounded scene commands. Python examples execute in Blender's embedded Python runtime with access to <code>bpy</code> and the current scene. A successful Rust or Python run replaces the previous generated scene; separately created Blender objects remain outside that lease. Canceling a dispatched Python run closes Blender because Python code cannot be safely interrupted. Snapshot / Update GLB exports the generated objects. The headless path also creates GLB previews.</p>
+          <p>Rust programs use the visible <code>blr_demo.rs</code> helper, which supports six primitive kinds, transforms, tint metadata and up to 64 objects. It uses Rust's bundled standard library, not private native <code>blr</code> sources or arbitrary Cargo dependencies. Blender's Workbench viewport uses gray Solid shading; the GLB snapshot turns tint metadata into browser materials. These views do not provide EEVEE or Cycles rendering. Compiler and Blender assets load only after you start the editor or run a program.</p>
+          <p>Python is trusted code with access to the Blender process, filesystem and other process side effects. Source and output limits do not make it a sandbox. Headless runs use a disposable Blender runtime. Editor runs cannot roll back arbitrary changes Python makes to pre-existing objects or other Blender state. Cleanup tracks IDs created by the run; cleanup uncertainty is reported as an error.</p>
+          <p>The demo is experimental and does not provide general <code>.blend</code> round trips or the full native API. Browser support requires cross-origin isolation and WebGPU for the editable Blender workspace; the GLB preview is the available fallback.</p>
+          <div class="about-links"><a href="./blr_demo.rs">Browser demo helper source</a><a href="./runtime-notices.html">Blender runtime notices</a><a href="./compiler-notices.html">Rust compiler and sysroot notices</a><a href="./LICENSE-APACHE">Apache-2.0 license</a><a href="./LICENSE-MIT">MIT license</a><a href="./vendor/NOTICE.html">Viewer third-party notices</a></div>
+        </div>
+      </details>
     </section>
   </main>
-  <footer><a class="footer-brand" href="./">BLR</a><span>Experimental browser playground · Rust + Blender 5.2.0</span><a href="./showcase/">Examples</a></footer>
+  <footer><a class="footer-brand" href="./">BLR</a><span>Experimental browser playground · Rust + Blender 5.2.0</span><a class="demo-home" href="/demos/">More demos <span aria-hidden="true">↗</span></a></footer>
 </body>
 </html>

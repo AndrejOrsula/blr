@@ -85,7 +85,7 @@ export function checkBlenderCapability({ signal, timeoutMs = DEFAULT_TIMEOUT_MS 
     const onAbort = () => finish(failure('cancelled', 'WebGPU capability check was cancelled.'), { cancelWorker: true });
 
     try {
-      worker = new Worker(new URL("./gui-capability-worker.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b", import.meta.url), {
+      worker = new Worker(new URL("./gui-capability-worker.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926", import.meta.url), {
         type: 'module',
         name: 'blr-webgpu-capability',
       });

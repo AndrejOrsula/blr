@@ -10,7 +10,7 @@ const compilerCacheName = `blr-compiler-assets:${scopePath}`;
 /* BLR_ASSET_PINS_BEGIN */
 const runtimeAssets = new Map([
   [`${scopePath}runtime/blender.js`, { size: 224813, sha256: "562cce8059f290b3c34459b9ca5c1688a9c9664a317b7bac0efdd2f77f81f217" }],
-  [`${scopePath}runtime/blender.wasm.gz`, { size: 33039789, sha256: "739150d6ad9bcd42662682dee87bcc1ceedd47454b74e82cf531dafc613c41f0" }],
+  [`${scopePath}runtime/blender.wasm.gz`, { size: 33041621, sha256: "8c7c8ee8720e06c6415ca2c6456c77778e2c564e1345cd40a4cff8e5d57ee901" }],
 ]);
 const maxRuntimeCacheBytes = 34603008;
 const compilerAssets = new Map([

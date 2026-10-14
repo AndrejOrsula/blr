@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"
+     role="img" aria-labelledby="favicon-title favicon-desc">
+  <title id="favicon-title">Andrej Orsula</title>
+  <desc id="favicon-desc">A pale circular loop with a teal descending stem.</desc>
+  <rect width="128" height="128" fill="#101e32"/>
+  <circle cx="58" cy="56" r="32" fill="none" stroke="#d9e6f4" stroke-width="14"/>
+  <path d="M90 56v33" fill="none" stroke="#83d9cc" stroke-width="14" stroke-linecap="round"/>
+</svg>

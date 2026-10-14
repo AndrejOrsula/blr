@@ -1,5 +1,5 @@
-import { WASI, WASIProcExit, File, Directory, OpenFile, PreopenDirectory, wasi as wasiDefs } from "../browser-wasi-shim/dist/index.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b";
-import { notifyProgress } from "../asset-loading.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b";
+import { WASI, WASIProcExit, File, Directory, OpenFile, PreopenDirectory, wasi as wasiDefs } from "../browser-wasi-shim/dist/index.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926";
+import { notifyProgress } from "../asset-loading.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926";
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 const MAX_TIMEOUT_MS = 600_000;
@@ -92,7 +92,7 @@ function filesystemBytes(root) {
 
 function makeWorker() {
   if (typeof Worker !== "function") fail("browser Worker support is required");
-  return new Worker(new URL("./worker.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b", import.meta.url), { type: "module", name: "blr-rust-compiler" });
+  return new Worker(new URL("./worker.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926", import.meta.url), { type: "module", name: "blr-rust-compiler" });
 }
 
 /** Run a standalone WASI command module in a disposable worker and in-memory filesystem. */

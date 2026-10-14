@@ -674,7 +674,7 @@ async function loadGuiTransport() {
     guiAvailable = true;
     return true;
   }
-  const guiModule = await import("./gui-transport.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b");
+  const guiModule = await import("./gui-transport.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926");
   if (typeof guiModule.createBlenderGui !== "function") throw new Error("GUI transport is missing createBlenderGui.");
   createBlenderGui = guiModule.createBlenderGui;
   guiAvailable = true;
@@ -1427,13 +1427,13 @@ function checkIsolation() {
 async function prepare() {
   const initialProgress = beginProgress("Loading examples and checking browser support");
   try {
-    runtimeNote.textContent = "Loading the examples and checking whether this browser can run Blender…";
+    runtimeNote.textContent = "Loading BLR…";
     const [compilerModule, blenderModule, viewerModule, inputModule, capabilityModule] = await Promise.all([
-      import("./compiler.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
-      import("./blender-runner.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
-      import("./scene-viewer.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
-      import("./compiler-inputs.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
-      import("./gui-capability.js?blr_app=e2a62bff4571b535bf49f8c5ef61b635947d79f33e7cf6e17d4d5c5fd7887e4b"),
+      import("./compiler.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
+      import("./blender-runner.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
+      import("./scene-viewer.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
+      import("./compiler-inputs.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
+      import("./gui-capability.js?blr_app=a04fd988c48d7984cfbb2a4470a1017f784b506d995b7dff1ad87a782f3fe926"),
     ]);
     if (typeof compilerModule.compileRust !== "function" || typeof blenderModule.runBlenderScene !== "function"
       || typeof blenderModule.runPythonScene !== "function" || typeof viewerModule.createScenePreview !== "function"
@@ -1489,9 +1489,9 @@ async function prepare() {
     ready = false;
     select.disabled = examples.length === 0;
     setPhase("Unavailable", "error");
-    runtimeNote.textContent = errorText(error, "The playground could not finish preparing.");
-    setRunButton("Playground unavailable", true);
-    appendDiagnostic(`[setup error] ${runtimeNote.textContent}`);
+    runtimeNote.textContent = "The BLR demo is unavailable right now. Reload the page to retry.";
+    setRunButton("Unavailable", true);
+    appendDiagnostic(`[setup error] ${errorText(error, "The BLR demo could not finish preparing.")}`);
   } finally {
     clearProgress(initialProgress);
   }

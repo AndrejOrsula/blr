@@ -5,12 +5,12 @@
       "sha256": "562cce8059f290b3c34459b9ca5c1688a9c9664a317b7bac0efdd2f77f81f217"
     },
     "blender.wasm.gz": {
-      "size": 33039789,
-      "sha256": "739150d6ad9bcd42662682dee87bcc1ceedd47454b74e82cf531dafc613c41f0"
+      "size": 33041621,
+      "sha256": "8c7c8ee8720e06c6415ca2c6456c77778e2c564e1345cd40a4cff8e5d57ee901"
     },
     "blender.wasm": {
-      "size": 111242836,
-      "sha256": "650a3e993c4118a02826d520ede0de3139422667dc056895568a572ef1055c50"
+      "size": 111241230,
+      "sha256": "66c0b8a10c4fcd8f7596bf8324dc6fa91b7d534c125e0d211466af768abc0d47"
     }
   }
 }
