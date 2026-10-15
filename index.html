@@ -7,12 +7,12 @@
   <meta name="description" content="Write and run Rust or Python examples with Blender in your browser.">
   <link rel="icon" type="image/svg+xml" href="./demo-kit/favicon.svg">
   <title>BLR · Runnable Rust and Blender playground</title>
-  <script src="./demo-kit/theme.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"></script>
-  <link rel="stylesheet" href="./demo-kit/tokens.css?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313">
-  <link rel="stylesheet" href="./demo-kit/local-font.css?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313">
-  <link rel="stylesheet" href="./app.css?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313">
-  <script src="./isolation.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"></script>
-  <script type="module" src="./app.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"></script>
+  <script src="./demo-kit/theme.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59"></script>
+  <link rel="stylesheet" href="./demo-kit/tokens.css?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59">
+  <link rel="stylesheet" href="./demo-kit/local-font.css?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59">
+  <link rel="stylesheet" href="./app.css?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59">
+  <script src="./isolation.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59"></script>
+  <script type="module" src="./app.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59"></script>
 </head>
 <body>
   <header class="topbar">
@@ -45,12 +45,13 @@
             <label class="example-picker">Example<select id="example-select" disabled aria-label="Choose an example"><option>Loading examples…</option></select></label>
           </div>
           <div class="language-row"><label for="language-select">Language</label><select id="language-select" disabled aria-label="Choose Rust or Python"><option value="rust">Rust</option><option value="python">Python</option></select><span id="language-note">Each language keeps its own draft.</span></div>
+          <div class="entrypoint-row" id="entrypoint-control" hidden><label for="entrypoint-select">Rust entrypoint</label><select id="entrypoint-select" disabled aria-label="Rust entrypoint"><option value="scene">Scene function</option><option value="main">Full program</option></select></div>
           <div class="editor-shell">
             <pre class="line-numbers" id="line-numbers" aria-hidden="true">1</pre>
             <label class="visually-hidden" for="source-editor">Editable Rust source</label>
             <textarea id="source-editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-describedby="editor-help" disabled></textarea>
           </div>
-          <p class="editor-help" id="editor-help">Tab inserts spaces. Press Escape to move to Run. <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> runs the current source.</p>
+          <p class="editor-help" id="editor-help">Choose Scene function for a scene-building function or Full program for a standalone program. Press <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> to run.</p>
           <div class="editor-actions">
             <button class="button-primary" id="run-button" type="button" disabled><span aria-hidden="true">▶</span> <span>Loading BLR…</span></button>
             <button class="button-secondary" id="cancel-button" type="button" hidden>Cancel run</button>
@@ -119,10 +120,10 @@
         <summary>About this playground and its limits</summary>
         <div class="about-copy">
           <p>Rust examples compile to bounded scene commands. Python examples execute in Blender's embedded Python runtime with access to <code>bpy</code> and the current scene. A successful Rust or Python run replaces the previous generated scene; separately created Blender objects remain outside that lease. Canceling a dispatched Python run closes Blender because Python code cannot be safely interrupted. Snapshot / Update GLB exports the generated objects. The headless path also creates GLB previews.</p>
-          <p>Rust programs use the visible <code>blr_demo.rs</code> helper, which supports six primitive kinds, transforms, tint metadata and up to 64 objects. It uses Rust's bundled standard library, not private native <code>blr</code> sources or arbitrary Cargo dependencies. Blender's Workbench viewport uses gray Solid shading; the GLB snapshot turns tint metadata into browser materials. These views do not provide EEVEE or Cycles rendering. Compiler and Blender assets load only after you start the editor or run a program.</p>
+          <p>Scene-function examples use shared <code>blr</code> recipe values compiled with a browser adapter into bounded Blender scene commands. The browser supports six primitive kinds, transforms, tint metadata and up to 64 objects. It does not expose the full native API or arbitrary Cargo dependencies; native source remains private. Blender's Workbench viewport uses gray Solid shading, while GLB previews turn tint metadata into browser materials. These views do not provide EEVEE or Cycles rendering. Compiler and Blender assets load only after you start the editor or run a program.</p>
           <p>Python is trusted code with access to the Blender process, filesystem and other process side effects. Source and output limits do not make it a sandbox. Headless runs use a disposable Blender runtime. Editor runs cannot roll back arbitrary changes Python makes to pre-existing objects or other Blender state. Cleanup tracks IDs created by the run; cleanup uncertainty is reported as an error.</p>
           <p>The demo is experimental and does not provide general <code>.blend</code> round trips or the full native API. Browser support requires cross-origin isolation and WebGPU for the editable Blender workspace; the GLB preview is the available fallback.</p>
-          <div class="about-links"><a href="./blr_demo.rs">Browser demo helper source</a><a href="./runtime-notices.html">Blender runtime notices</a><a href="./compiler-notices.html">Rust compiler and sysroot notices</a><a href="./LICENSE-APACHE">Apache-2.0 license</a><a href="./LICENSE-MIT">MIT license</a><a href="./vendor/NOTICE.html">Viewer third-party notices</a></div>
+          <div class="about-links"><a href="./blr_demo.rs">Legacy helper source</a><a href="./runtime-notices.html">Blender runtime notices</a><a href="./compiler-notices.html">Rust compiler and sysroot notices</a><a href="./LICENSE-APACHE">Apache-2.0 license</a><a href="./LICENSE-MIT">MIT license</a><a href="./vendor/NOTICE.html">Viewer third-party notices</a></div>
         </div>
       </details>
     </section>

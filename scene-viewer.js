@@ -207,7 +207,7 @@ function supportsWebGl(win) {
  * Mount an interactive preview in `host`. Input positions use Blender's world-space Z-up axes.
  * Colors are linear sRGB RGBA factors in [0, 1], as required by glTF PBR materials.
  */
-export function createScenePreview(host, { loadViewer = () => import(new URL("./vendor/model-viewer.min.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313", import.meta.url).href) } = {}) {
+export function createScenePreview(host, { loadViewer = () => import(new URL("./vendor/model-viewer.min.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59", import.meta.url).href) } = {}) {
   if (!host || typeof host.append !== "function" || !host.ownerDocument) throw new TypeError("createScenePreview requires a DOM host element");
   const doc = host.ownerDocument;
   const win = doc.defaultView;

@@ -1,14 +1,13 @@
-import { runWasiTool } from "./compiler/direct-host/index.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
-import { runGuest } from "./compiler/guest/runner.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
-import { notifyProgress } from "./compiler/asset-loading.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
-import { loadExampleInputs, loadPinnedInputs, PINNED_TOOLCHAIN } from "./compiler-inputs.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
+import { runWasiTool } from "./compiler/direct-host/index.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59";
+import { runGuest } from "./compiler/guest/runner.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59";
+import { notifyProgress } from "./compiler/asset-loading.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59";
+import { loadExampleInputs, loadPinnedInputs, PINNED_TOOLCHAIN } from "./compiler-inputs.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59";
 
 const MAX_SOURCE_BYTES = 256 * 1024;
 const MAX_OUTPUT_CHARS = 512 * 1024;
 const COMPILER_TIMEOUT_MS = 180_000;
 const GUEST_TIMEOUT_MS = 10_000;
 const MAX_GUEST_MODULE_BYTES = 16 * 1024 * 1024;
-let cachedHelperLibrary;
 
 function notifyStatus(onStatus, text) {
   try { onStatus?.(text); } catch {}
@@ -47,117 +46,51 @@ function compilerFailure(stdout, stderr, exitCode = 1) {
   };
 }
 
-function helperLibraryKey(inputs) {
-  const compilerIdentity = inputs.rustcSha256 || inputs.compilerSha256;
-  if (!compilerIdentity || !inputs.helperSha256) return undefined;
-  return [PINNED_TOOLCHAIN.compilerVersion, PINNED_TOOLCHAIN.target, compilerIdentity, inputs.helperSha256].join(":");
-}
+const SCENE_RUNNER = `#[path = "main.rs"]
+mod example;
 
-async function compileHelperLibrary(inputs, { signal, onProgress, onOutput }) {
-  const key = helperLibraryKey(inputs);
-  if (key && cachedHelperLibrary?.key === key) {
-    for (const stream of ["stdout", "stderr"]) {
-      if (cachedHelperLibrary[stream]) emitOutput(onOutput, { stdout: "", stderr: "" }, { stream, text: cachedHelperLibrary[stream] });
-    }
-    return cachedHelperLibrary;
-  }
-  const capture = { stdout: "", stderr: "" };
-  let built;
-  try {
-    built = await runWasiTool({
-      moduleBytes: inputs.rustcBytes,
-      args: [
-        "rustc", "/src/blr_demo.rs", "--sysroot", "/sysroot", "--target", PINNED_TOOLCHAIN.target,
-        "--edition=2021", "--crate-name", "blr", "--crate-type=rlib", "-o", "/target/libblr.rlib",
-      ],
-      files: {
-        ...inputs.sysrootFiles,
-        "src/blr_demo.rs": inputs.helper,
-      },
-      signal,
-      timeoutMs: COMPILER_TIMEOUT_MS,
-      memory: { initialPages: 399, maximumPages: 16384 },
-      onProgress,
-      onOutput: (record) => emitOutput(onOutput, capture, record),
-    });
-  } catch (error) {
-    if (signal?.aborted || error?.name === "AbortError") throw abortError();
-    const diagnostic = capture.stderr + capture.stdout;
-    if (isRustDiagnostic(diagnostic)) {
-      return { exitCode: 1, stdout: capture.stdout, stderr: capture.stderr };
-    }
-    throw error;
-  }
-  if (built.exitCode !== 0) {
-    return { exitCode: built.exitCode, stdout: built.stdout, stderr: built.stderr };
-  }
-  const library = built.files["/target/libblr.rlib"];
-  if (!(library instanceof Uint8Array) || library.byteLength === 0) {
-    return {
-      exitCode: 1,
-      stdout: built.stdout,
-      stderr: `${built.stderr}\nRust compiler did not produce the expected browser helper library.`.trim(),
-    };
-  }
-  if (signal?.aborted) throw abortError();
-  const result = {
-    exitCode: 0,
-    key,
-    bytes: library.slice(),
-    stdout: built.stdout,
-    stderr: built.stderr,
-    rustcAssetSha256: inputs.rustcAssetSha256,
-    helperSha256: inputs.helperSha256,
-  };
-  if (key) cachedHelperLibrary = result;
-  return result;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let recipe = example::scene()?;
+    blr::browser::submit(&recipe)?;
+    Ok(())
 }
+`;
 
 /** Compile editable Rust locally to wasm32-wasip1, then run it in the separate bounded guest worker. */
-export async function compileRust(source, { signal, onStatus, onProgress, onOutput, exampleInputs } = {}) {
+export async function compileRust(source, { entryPoint = "main", signal, onStatus, onProgress, onOutput, exampleInputs } = {}) {
   assertSource(source, signal);
+  if (entryPoint !== "main" && entryPoint !== "scene") {
+    throw new TypeError("Rust entrypoint must be 'main' or 'scene'.");
+  }
   const compileCapture = { stdout: "", stderr: "" };
   notifyStatus(onStatus, "Loading pinned Rust compiler and wasm32-wasip1 standard library");
   const inputs = await loadPinnedInputs({ signal, onProgress, exampleInputs });
   if (signal?.aborted) throw abortError();
-  notifyStatus(onStatus, "Preparing the browser blr helper library");
-  notifyProgress(onProgress, { phase: "compile", asset: "blr-helper", state: "start", source: "work" });
-  let helperLibrary;
-  try {
-    helperLibrary = await compileHelperLibrary(inputs, { signal, onProgress, onOutput });
-  } catch (error) {
-    const aborted = signal?.aborted || error?.name === "AbortError";
-    notifyProgress(onProgress, {
-      phase: "compile", asset: "blr-helper", state: aborted ? "cancelled" : "error", source: "work",
-      error: aborted ? null : String(error?.message || error).slice(0, 1024),
-    });
-    if (aborted) throw abortError();
-    const diagnostic = compileCapture.stderr + compileCapture.stdout;
-    if (isRustDiagnostic(diagnostic)) {
-      return compilerFailure(compileCapture.stdout, compileCapture.stderr);
-    }
-    throw error;
-  }
-  if (helperLibrary.exitCode !== 0) {
-    notifyProgress(onProgress, { phase: "compile", asset: "blr-helper", state: "error", source: "work", error: null });
-    return compilerFailure(helperLibrary.stdout, helperLibrary.stderr, helperLibrary.exitCode);
+  const authoringLibrary = inputs.manifest.authoringLibrary;
+  if (authoringLibrary.compilerVersion !== PINNED_TOOLCHAIN.compilerVersion
+    || authoringLibrary.target !== PINNED_TOOLCHAIN.target
+    || authoringLibrary.rustcAssetSha256 !== inputs.rustcAssetSha256
+    || authoringLibrary.sysrootAssetSha256 !== inputs.sysrootAssetSha256) {
+    throw new Error("Rust authoring library does not match the loaded pinned compiler and sysroot.");
   }
   if (signal?.aborted) throw abortError();
-  notifyProgress(onProgress, { phase: "compile", asset: "blr-helper", state: "complete", source: "work" });
+  notifyStatus(onStatus, "Compiling Rust against the verified browser blr library");
   const files = {
     ...inputs.sysrootFiles,
     "src/main.rs": new TextEncoder().encode(source),
     "src/blr_demo.rs": inputs.helper,
-    "target/libblr.rlib": helperLibrary.bytes,
+    "src/runner.rs": new TextEncoder().encode(SCENE_RUNNER),
+    "target/libblr.rlib": inputs.library,
   };
   notifyStatus(onStatus, "Compiling Rust for wasm32-wasip1");
   notifyProgress(onProgress, { phase: "compile", asset: "user-source", state: "start", source: "work" });
+  const inputPath = entryPoint === "scene" ? "/src/runner.rs" : "/src/main.rs";
   let built;
   try {
     built = await runWasiTool({
       moduleBytes: inputs.rustcBytes,
       args: [
-        "rustc", "/src/main.rs", "--sysroot", "/sysroot", "--target", PINNED_TOOLCHAIN.target,
+        "rustc", inputPath, "--sysroot", "/sysroot", "--target", PINNED_TOOLCHAIN.target,
         "--edition=2021",
         "--extern", "blr=/target/libblr.rlib",
         "-Clinker=wasm-ld", "-C", "link-arg=--max-memory=268435456", "-o", "/target/main.wasm",

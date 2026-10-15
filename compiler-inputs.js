@@ -1,6 +1,7 @@
-import { notifyProgress, readBoundedJson, readBoundedResponse, runWithAssetLoadBounds } from "./compiler/asset-loading.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313";
+import { notifyProgress, readBoundedJson, readBoundedResponse, runWithAssetLoadBounds } from "./compiler/asset-loading.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59";
 
 const MAX_HELPER_BYTES = 128 * 1024;
+const MAX_AUTHORING_LIBRARY_BYTES = 16 * 1024 * 1024;
 const MAX_COMPILER_MANIFEST_BYTES = 8 * 1024;
 const MAX_EXAMPLES_MANIFEST_BYTES = 32 * 1024;
 const MAX_COMPRESSED_BYTES = 24 * 1024 * 1024;
@@ -208,7 +209,7 @@ async function decodeAsset(file, pin, signal, onProgress, asset) {
       totalBytes: pin.bytes, source: "network-or-cache", error: null,
     });
   checkAbort(signal);
-  const worker = new Worker(new URL("./compiler/decode-worker.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313", import.meta.url), {
+  const worker = new Worker(new URL("./compiler/decode-worker.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59", import.meta.url), {
     type: "module",
     name: "blr-pinned-toolchain-decoder",
   });
@@ -298,10 +299,21 @@ let cachedExampleInputs;
 
 function validateExampleManifest(examples) {
   if (!examples || typeof examples !== "object" || Array.isArray(examples)
-    || examples.schema !== "blr-rust-demo-examples-v1"
+    || examples.schema !== "blr-rust-demo-examples-v2"
     || examples.compilerTarget !== "wasm32-wasip1"
     || examples.helperModule !== "blr_demo.rs"
     || !/^[a-f0-9]{64}$/.test(examples.helperSha256 || "")
+    || !examples.authoringLibrary || typeof examples.authoringLibrary !== "object"
+    || Array.isArray(examples.authoringLibrary)
+    || examples.authoringLibrary.file !== "libblr.rlib"
+    || !Number.isSafeInteger(examples.authoringLibrary.bytes)
+    || examples.authoringLibrary.bytes <= 0
+    || examples.authoringLibrary.bytes > MAX_AUTHORING_LIBRARY_BYTES
+    || !/^[a-f0-9]{64}$/.test(examples.authoringLibrary.sha256 || "")
+    || examples.authoringLibrary.compilerVersion !== "rustc 1.83.0-dev"
+    || examples.authoringLibrary.target !== "wasm32-wasip1"
+    || examples.authoringLibrary.rustcAssetSha256 !== pins.get("compiler/assets/rustc_opt.wasm.br").sha256
+    || examples.authoringLibrary.sysrootAssetSha256 !== pins.get("compiler/assets/wasm32-wasip1.tar.br").sha256
     || !Array.isArray(examples.examples) || examples.examples.length === 0 || examples.examples.length > 12) {
     throw new Error("Rust example manifest has an unsupported schema.");
   }
@@ -310,6 +322,7 @@ function validateExampleManifest(examples) {
     if (!example || typeof example !== "object" || Array.isArray(example)
       || typeof example.id !== "string" || !example.id || ids.has(example.id)
       || typeof example.source !== "string"
+      || example.rustEntryPoint !== "scene"
       || (example.pythonSource !== undefined && typeof example.pythonSource !== "string")
       || (example.languages !== undefined && (!Array.isArray(example.languages)
         || example.languages.some((language) => language !== "rust" && language !== "python")
@@ -320,7 +333,7 @@ function validateExampleManifest(examples) {
   }
 }
 
-/** Load and verify the example metadata/helper once for both the UI and compiler. */
+/** Load and verify example metadata and pinned authoring inputs once for both the UI and compiler. */
 export async function loadExampleInputs({ signal, onProgress } = {}) {
   checkAbort(signal);
   if (cachedExampleInputs) {
@@ -331,6 +344,11 @@ export async function loadExampleInputs({ signal, onProgress } = {}) {
     checkAbort(signal);
     notifyProgress(onProgress, {
       phase: "fetch", asset: "blr-helper", state: "complete",
+      loadedBytes: null, totalBytes: null, source: "memory-cache", error: null,
+    });
+    checkAbort(signal);
+    notifyProgress(onProgress, {
+      phase: "fetch", asset: "blr-library", state: "complete",
       loadedBytes: null, totalBytes: null, source: "memory-cache", error: null,
     });
     checkAbort(signal);
@@ -412,12 +430,53 @@ export async function loadExampleInputs({ signal, onProgress } = {}) {
         totalBytes: null, source: "network-or-cache", error: null,
       });
     checkAbort(loadSignal);
+    const libraryPin = manifest.authoringLibrary;
+    const libraryUrl = new URL(`./${libraryPin.file}?v=${encodeURIComponent(libraryPin.sha256)}`, import.meta.url);
+    const libraryOptions = {
+      signal: loadSignal, limit: MAX_AUTHORING_LIBRARY_BYTES, label: "Rust authoring library",
+      onProgress, asset: "blr-library", totalBytes: libraryPin.bytes,
+    };
+    let library = await fetchBytes(libraryUrl, libraryOptions);
+    checkAbort(loadSignal);
+    workStage(onProgress, "verify", "blr-library", "start", library.byteLength, libraryPin.bytes);
+    try {
+      if (library.byteLength !== libraryPin.bytes) {
+        throw new Error(`Rust authoring library size ${library.byteLength} does not match the manifest size ${libraryPin.bytes}.`);
+      }
+      let libraryDigest = await digest(library);
+      checkAbort(loadSignal);
+      if (libraryDigest !== libraryPin.sha256) {
+        library = await fetchBytes(libraryUrl, { ...libraryOptions, cache: "reload" });
+        checkAbort(loadSignal);
+        if (library.byteLength !== libraryPin.bytes) {
+          throw new Error(`Rust authoring library size ${library.byteLength} does not match the manifest size ${libraryPin.bytes}.`);
+        }
+        libraryDigest = await digest(library);
+        checkAbort(loadSignal);
+      }
+      if (libraryDigest !== libraryPin.sha256) {
+        throw new Error("Rust authoring library does not match the examples manifest.");
+      }
+      verifiedStage(onProgress, "blr-library", "complete", library.byteLength, libraryPin.bytes);
+    } catch (error) {
+      verifiedStage(onProgress, "blr-library", isAbort(error, loadSignal) ? "cancelled" : "error",
+        library?.byteLength ?? null, libraryPin.bytes, isAbort(error, loadSignal) ? null : errorMessage(error));
+      throw error;
+    }
+    checkAbort(loadSignal);
+    notifyProgress(onProgress, {
+      phase: "fetch", asset: "blr-library", state: "complete", loadedBytes: library.byteLength,
+      totalBytes: libraryPin.bytes, source: "network-or-cache", error: null,
+    });
+    checkAbort(loadSignal);
     const inputs = {
       manifest,
       examples: manifest.examples,
       helper,
       helperText,
       helperSha256: manifest.helperSha256,
+      library,
+      librarySha256: libraryPin.sha256,
     };
     cachedExampleInputs = inputs;
     return inputs;
@@ -428,8 +487,10 @@ async function useExampleInputs(inputs, { signal, onProgress } = {}) {
   const candidate = inputs ?? await loadExampleInputs({ signal, onProgress });
   checkAbort(signal);
   workStage(onProgress, "verify", "examples-manifest", "start");
+  let manifest;
   try {
-    validateExampleManifest(candidate?.manifest);
+    manifest = structuredClone(candidate?.manifest);
+    validateExampleManifest(manifest);
     checkAbort(signal);
     workStage(onProgress, "verify", "examples-manifest", "complete");
   } catch (error) {
@@ -446,7 +507,7 @@ async function useExampleInputs(inputs, { signal, onProgress } = {}) {
       throw new Error("Rust scene helper does not match the examples manifest.");
     }
     helper = candidate.helper.slice();
-    if (await digest(helper) !== candidate.manifest.helperSha256) {
+    if (await digest(helper) !== manifest.helperSha256) {
       throw new Error("Rust scene helper does not match the examples manifest.");
     }
     helperText = new TextDecoder("utf-8", { fatal: true }).decode(helper);
@@ -459,14 +520,40 @@ async function useExampleInputs(inputs, { signal, onProgress } = {}) {
   }
   checkAbort(signal);
   const verified = {
-    manifest: candidate.manifest,
-    examples: candidate.manifest.examples,
+    manifest,
+    examples: manifest.examples,
     helper,
     helperText,
-    helperSha256: candidate.manifest.helperSha256,
+    helperSha256: manifest.helperSha256,
+    librarySha256: manifest.authoringLibrary.sha256,
   };
+  workStage(onProgress, "verify", "blr-library", "start", candidate.library?.byteLength ?? null,
+    manifest.authoringLibrary.bytes);
+  try {
+    if (!(candidate.library instanceof Uint8Array)) {
+      throw new Error("Rust authoring library does not match the examples manifest.");
+    }
+    verified.library = candidate.library.slice();
+    const libraryPin = manifest.authoringLibrary;
+    if (verified.library.byteLength !== libraryPin.bytes || await digest(verified.library) !== libraryPin.sha256) {
+      throw new Error("Rust authoring library does not match the examples manifest.");
+    }
+    if (libraryPin.compilerVersion !== PINNED_TOOLCHAIN.compilerVersion
+      || libraryPin.target !== PINNED_TOOLCHAIN.target
+      || libraryPin.rustcAssetSha256 !== pins.get("compiler/assets/rustc_opt.wasm.br").sha256
+      || libraryPin.sysrootAssetSha256 !== pins.get("compiler/assets/wasm32-wasip1.tar.br").sha256) {
+      throw new Error("Rust authoring library does not match the pinned compiler and sysroot.");
+    }
+    checkAbort(signal);
+    verifiedStage(onProgress, "blr-library", "complete", verified.library.byteLength, libraryPin.bytes);
+  } catch (error) {
+    verifiedStage(onProgress, "blr-library", isAbort(error, signal) ? "cancelled" : "error",
+      verified.library?.byteLength ?? candidate.library?.byteLength ?? null,
+      manifest.authoringLibrary.bytes, isAbort(error, signal) ? null : errorMessage(error));
+    throw error;
+  }
   if (inputs) {
-    for (const asset of ["examples-manifest", "blr-helper"]) {
+    for (const asset of ["examples-manifest", "blr-helper", "blr-library"]) {
       checkAbort(signal);
       notifyProgress(onProgress, {
         phase: "fetch", asset, state: "complete", loadedBytes: null,
@@ -561,6 +648,7 @@ export async function loadPinnedInputs({ signal, onProgress, exampleInputs } = {
       rustcBytes,
       rustcSha256: rustcPin.rawSha256,
       rustcAssetSha256: rustcPin.sha256,
+      sysrootAssetSha256: sysrootPin.sha256,
       sysrootFiles,
     };
     cachedInputs = inputs;
@@ -579,6 +667,8 @@ export function clearExampleInputCacheForTest() {
 export const PINNED_TOOLCHAIN = Object.freeze({
   compilerVersion: "rustc 1.83.0-dev",
   target: "wasm32-wasip1",
+  rustcAssetSha256: pins.get("compiler/assets/rustc_opt.wasm.br").sha256,
+  sysrootAssetSha256: pins.get("compiler/assets/wasm32-wasip1.tar.br").sha256,
   rawCompilerBytes: 95343874,
   rawSysrootTarBytes: 74096640,
   compressedBytes: 38707707,

@@ -10,7 +10,8 @@ const SUPPORTED_WASI_IMPORTS = new Set([
   "fd_read", "fd_seek", "fd_sync", "fd_tell", "fd_write",
   "poll_oneoff", "proc_exit", "proc_raise", "random_get", "sched_yield",
 ]);
-const DRAFT_PREFIX = "blr-playground-draft-v1:";
+const RUST_DRAFT_PREFIX = "blr-playground-rust-draft-v2:";
+const LEGACY_RUST_DRAFT_PREFIX = "blr-playground-draft-v1:";
 const PYTHON_DRAFT_PREFIX = "blr-playground-python-draft-v1:";
 const $ = (selector) => document.querySelector(selector);
 
@@ -21,6 +22,8 @@ const runButton = $("#run-button");
 const cancelButton = $("#cancel-button");
 const resetButton = $("#reset-button");
 const languageSelect = $("#language-select");
+const entrypointControl = $("#entrypoint-control");
+const entrypointSelect = $("#entrypoint-select");
 const diagnostics = $("#diagnostics");
 const phase = $("#phase");
 const runPanel = $(".run-panel");
@@ -57,11 +60,14 @@ let guiStartupInProgress = false;
 let examples = [];
 let activeExample = null;
 let activeLanguage = "rust";
+let activeRustEntryPoint = "scene";
 let exampleInputs = null;
 let previewModeExplicitlySelected = false;
 let activeRun = null;
 let runSerial = 0;
 let draftTimer = 0;
+const draftMemory = new Map();
+const protectedMalformedRustDrafts = new Set();
 let ready = false;
 let previewMode = "glb";
 let guiAvailable = false;
@@ -231,13 +237,80 @@ function updateGutter() {
 }
 
 function draftKey(id, language = activeLanguage) {
-  return `${language === "python" ? PYTHON_DRAFT_PREFIX : DRAFT_PREFIX}${id}`;
+  return `${language === "python" ? PYTHON_DRAFT_PREFIX : RUST_DRAFT_PREFIX}${id}`;
+}
+
+function legacyRustDraftKey(id) {
+  return `${LEGACY_RUST_DRAFT_PREFIX}${id}`;
+}
+
+function validRustDraft(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value).sort();
+  return keys.length === 3 && keys[0] === "entryPoint" && keys[1] === "schema" && keys[2] === "source"
+    && value.schema === "blr-rust-draft-v2"
+    && typeof value.source === "string"
+    && (value.entryPoint === "scene" || value.entryPoint === "main");
+}
+
+function rustDraftRecord(source, entryPoint = activeRustEntryPoint) {
+  return { schema: "blr-rust-draft-v2", source, entryPoint };
+}
+
+function rememberDraft(key, draft) {
+  draftMemory.set(key, draft);
+  if (key.startsWith(RUST_DRAFT_PREFIX)) activeRustEntryPoint = draft.entryPoint;
+}
+
+function loadRustDraft(example) {
+  const key = draftKey(example.id, "rust");
+  const inTab = draftMemory.get(key);
+  if (inTab) {
+    activeRustEntryPoint = inTab.entryPoint;
+    return inTab.source;
+  }
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored !== null) {
+      let parsed;
+      try { parsed = JSON.parse(stored); } catch {}
+      if (validRustDraft(parsed)) {
+        rememberDraft(key, parsed);
+        return parsed.source;
+      }
+      protectedMalformedRustDrafts.add(key);
+    }
+    const legacy = localStorage.getItem(legacyRustDraftKey(example.id));
+    if (legacy !== null) {
+      const migrated = rustDraftRecord(legacy, "main");
+      rememberDraft(key, migrated);
+      if (!protectedMalformedRustDrafts.has(key)) {
+        try { localStorage.setItem(key, JSON.stringify(migrated)); } catch {}
+      }
+      return legacy;
+    }
+  } catch {
+    // The tab cache below keeps edits and entrypoint choices available if storage fails.
+  }
+  activeRustEntryPoint = example.rustEntryPoint;
+  return example.source;
 }
 
 function saveDraft() {
   if (!activeExample) return;
+  const key = draftKey(activeExample.id, activeLanguage);
+  if (activeLanguage === "rust") rememberDraft(key, rustDraftRecord(editor.value));
+  else draftMemory.set(key, editor.value);
   try {
-    localStorage.setItem(draftKey(activeExample.id, activeLanguage), editor.value);
+    if (activeLanguage === "rust") {
+      if (protectedMalformedRustDrafts.has(key)) {
+        $("#draft-status").textContent = "Saved Rust draft is malformed; changes stay in this tab until reset";
+        return;
+      }
+      localStorage.setItem(key, JSON.stringify(rustDraftRecord(editor.value)));
+    } else {
+      localStorage.setItem(key, editor.value);
+    }
     $("#draft-status").textContent = "Draft saved in this browser";
   } catch {
     $("#draft-status").textContent = "Draft stays in this tab (browser storage unavailable)";
@@ -249,9 +322,15 @@ function exampleSource(example, language = activeLanguage) {
 }
 
 function loadDraft(example, language = activeLanguage) {
+  if (language === "rust") return loadRustDraft(example);
+  const key = draftKey(example.id, language);
+  if (draftMemory.has(key)) return draftMemory.get(key);
   const source = exampleSource(example, language);
   try {
-    return localStorage.getItem(draftKey(example.id, language)) ?? source;
+    const stored = localStorage.getItem(key);
+    const draft = stored ?? source;
+    draftMemory.set(key, draft);
+    return draft;
   } catch {
     return source;
   }
@@ -259,13 +338,16 @@ function loadDraft(example, language = activeLanguage) {
 
 function updateEditorLanguageLabels() {
   const languageName = activeLanguage === "python" ? "Python" : "Rust";
+  entrypointControl.hidden = activeLanguage !== "rust";
+  entrypointSelect.disabled = activeLanguage !== "rust" || !ready || Boolean(activeRun);
+  entrypointSelect.value = activeRustEntryPoint;
   $("#editor-title").textContent = `${languageName} source`;
   const compileStageLabel = stages.compile.querySelector("span:last-child");
   if (compileStageLabel) compileStageLabel.textContent = activeLanguage === "python" ? "Python source" : "Rust compile";
   editor.setAttribute("aria-label", `Editable ${languageName} source`);
   $("#editor-help").innerHTML = activeLanguage === "python"
     ? "Tab inserts spaces. Python runs real <code>bpy</code> in Blender; it can change any scene object. Canceling after dispatch closes the editor to stop execution."
-    : 'Tab inserts spaces. Press Escape to move to Run. <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> runs the current source.';
+    : 'Choose Scene function for a scene-building function or Full program for a standalone program. Press <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> to run.';
   setRunButton(activeLanguage === "python"
     ? (previewMode === "blender" ? "Run Python in Blender" : "Run Python + Blender")
     : (previewMode === "blender" ? "Run in Blender" : "Run Rust + Blender"), !ready || Boolean(activeRun));
@@ -674,7 +756,7 @@ async function loadGuiTransport() {
     guiAvailable = true;
     return true;
   }
-  const guiModule = await import("./gui-transport.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313");
+  const guiModule = await import("./gui-transport.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59");
   if (typeof guiModule.createBlenderGui !== "function") throw new Error("GUI transport is missing createBlenderGui.");
   createBlenderGui = guiModule.createBlenderGui;
   guiAvailable = true;
@@ -1035,6 +1117,7 @@ async function runCurrentSource() {
     id: ++runSerial,
     controller: new AbortController(),
     language: activeLanguage,
+    entryPoint: activeLanguage === "rust" ? activeRustEntryPoint : null,
     source: editor.value,
     hadGlbPreview: Boolean(glbSummary || guiSnapshotPresent),
     streamedStreams: new Set(),
@@ -1046,6 +1129,7 @@ async function runCurrentSource() {
     statusActive: true,
   };
   activeRun = run;
+  entrypointSelect.disabled = true;
   run.progressId = beginProgress(`Starting ${run.language === "python" ? "Python" : "Rust"} run`);
   updateGuiActions();
   resetStages();
@@ -1087,7 +1171,7 @@ async function runCurrentSource() {
       });
     }
     if (run.language === "rust") {
-      const compiled = await compileRust(run.source, options);
+      const compiled = await compileRust(run.source, { ...options, entryPoint: run.entryPoint });
       if (activeRun !== run || run.controller.signal.aborted) return;
       lastGuestBoundaryProof = formatGuestBoundary(compiled?.guestBoundary);
       if (lastGuestBoundaryProof) {
@@ -1368,13 +1452,21 @@ function cancelRun() {
   updateGuiActions();
 }
 
-function loadExamples(inputs) {
+async function loadExamples(inputs) {
   const data = inputs?.manifest;
-  if (!data || data.schema !== "blr-rust-demo-examples-v1" || data.helperModule !== "blr_demo.rs"
+  const libraryPin = data?.authoringLibrary;
+  if (!data || data.schema !== "blr-rust-demo-examples-v2" || data.helperModule !== "blr_demo.rs"
     || !/^[a-f0-9]{64}$/.test(data.helperSha256 || "") || data.compilerTarget !== "wasm32-wasip1"
+    || !libraryPin || typeof libraryPin !== "object" || Array.isArray(libraryPin)
+    || libraryPin.file !== "libblr.rlib" || !Number.isSafeInteger(libraryPin.bytes) || libraryPin.bytes <= 0
+    || !/^[a-f0-9]{64}$/.test(libraryPin.sha256 || "")
+    || inputs.librarySha256 !== libraryPin.sha256 || !(inputs.library instanceof Uint8Array)
+    || inputs.library.byteLength !== libraryPin.bytes
     || !Array.isArray(data.examples) || data.examples.length === 0 || data.examples.length > 12) {
     throw new Error("The examples manifest is invalid or targets an unsupported compiler.");
   }
+  const libraryHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", inputs.library)), byte => byte.toString(16).padStart(2, "0")).join("");
+  if (libraryHash !== libraryPin.sha256) throw new Error("The verified Rust authoring library did not match the examples manifest.");
   if (inputs.helperSha256 !== data.helperSha256 || !(inputs.helper instanceof Uint8Array) || typeof inputs.helperText !== "string") {
     throw new Error("The verified Rust helper input did not match the examples manifest.");
   }
@@ -1382,7 +1474,8 @@ function loadExamples(inputs) {
   const siteLanguages = Array.isArray(data.languages) ? data.languages : null;
   examples = data.examples.map((example, index) => {
     if (!example || typeof example.id !== "string" || typeof example.title !== "string" || typeof example.source !== "string"
-      || !example.id || example.id.length > 80 || !example.title || example.title.length > 120 || ids.has(example.id)) {
+      || !example.id || example.id.length > 80 || !example.title || example.title.length > 120 || ids.has(example.id)
+      || example.rustEntryPoint !== "scene") {
       throw new Error(`Example ${index + 1} has an invalid or duplicate id, title, or source.`);
     }
     if (!sourceWithinLimit(example.source)) throw new Error(`Example ${index + 1} exceeds the 256 KiB source limit.`);
@@ -1400,6 +1493,7 @@ function loadExamples(inputs) {
       title: example.title,
       description: typeof example.description === "string" ? example.description : "",
       source: example.source,
+      rustEntryPoint: example.rustEntryPoint,
       pythonSource: example.pythonSource,
       languages: [...languages],
     };
@@ -1429,11 +1523,11 @@ async function prepare() {
   try {
     runtimeNote.textContent = "Loading BLR…";
     const [compilerModule, blenderModule, viewerModule, inputModule, capabilityModule] = await Promise.all([
-      import("./compiler.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
-      import("./blender-runner.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
-      import("./scene-viewer.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
-      import("./compiler-inputs.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
-      import("./gui-capability.js?blr_app=7e291aa70f255adf2d922cb97762e2d3457ad6d22b5d1d8ee2132da4497db313"),
+      import("./compiler.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59"),
+      import("./blender-runner.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59"),
+      import("./scene-viewer.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59"),
+      import("./compiler-inputs.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59"),
+      import("./gui-capability.js?blr_app=543af08c9c9d6446694684fd0182efa61b8269029917ff4e95fd0f76dfb5ab59"),
     ]);
     if (typeof compilerModule.compileRust !== "function" || typeof blenderModule.runBlenderScene !== "function"
       || typeof blenderModule.runPythonScene !== "function" || typeof viewerModule.createScenePreview !== "function"
@@ -1457,7 +1551,7 @@ async function prepare() {
       })),
       isolation,
     ]).then(values => [values[0], values[1]]);
-    loadExamples(inputs);
+    await loadExamples(inputs);
     guiCapabilitySupported = capability.supported === true;
     guiCapabilityReason = capabilityMessage(capability);
     if (capability.supported !== true) appendDiagnostic(`[Blender UI capability] ${capability.code || "unavailable"}: ${errorText(new Error(capability.reason), guiCapabilityReason)}`);
@@ -1560,6 +1654,17 @@ cancelButton.addEventListener("click", cancelRun);
 $("#mode-blender").addEventListener("click", () => setPreviewMode("blender", true));
 $("#mode-glb").addEventListener("click", () => setPreviewMode("glb", true));
 languageSelect.addEventListener("change", () => selectLanguage(languageSelect.value));
+entrypointSelect.addEventListener("change", () => {
+  if (activeLanguage !== "rust" || activeRun || (entrypointSelect.value !== "scene" && entrypointSelect.value !== "main")) {
+    entrypointSelect.value = activeRustEntryPoint;
+    return;
+  }
+  saveDraft();
+  activeRustEntryPoint = entrypointSelect.value;
+  saveDraft();
+  updateEditorLanguageLabels();
+  markResultStale();
+});
 startBlenderButton.addEventListener("click", () => { void startBlender(); });
 snapshotGlbButton.addEventListener("click", () => { void snapshotBlenderScene(); });
 clearGeneratedButton.addEventListener("click", () => { void clearGeneratedObjects(); });
@@ -1568,8 +1673,21 @@ fullscreenBlenderButton.addEventListener("click", () => { void toggleBlenderFull
 document.addEventListener?.("fullscreenchange", updateGuiActions);
 resetButton.addEventListener("click", () => {
   if (!activeExample || activeRun) return;
-  try { localStorage.removeItem(draftKey(activeExample.id, activeLanguage)); } catch {}
+  clearTimeout(draftTimer);
+  const key = draftKey(activeExample.id, activeLanguage);
+  draftMemory.delete(key);
+  if (activeLanguage === "rust") {
+    protectedMalformedRustDrafts.delete(key);
+    try { localStorage.removeItem(key); } catch {}
+    try { localStorage.removeItem(legacyRustDraftKey(activeExample.id)); } catch {}
+    activeRustEntryPoint = activeExample.rustEntryPoint;
+  } else {
+    try { localStorage.removeItem(key); } catch {}
+  }
   editor.value = exampleSource(activeExample, activeLanguage);
+  if (activeLanguage === "rust") rememberDraft(key, rustDraftRecord(editor.value, activeExample.rustEntryPoint));
+  else draftMemory.set(key, editor.value);
+  updateEditorLanguageLabels();
   updateGutter();
   $("#draft-status").textContent = `Example reset · ${activeExample.title} · ${activeLanguage === "python" ? "Python" : "Rust"}`;
   markResultStale();
